@@ -1,6 +1,6 @@
 // R A 4
 //
-// Version 1.0
+// Version 1
 //
 // by Joakim Hertze (www.hertze.se)
 //
