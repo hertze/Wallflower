@@ -197,8 +197,43 @@ function saveClose() {
 	doc.close(SaveOptions.DONOTSAVECHANGES);
 }
 
+function getHistogramThresholds(histogram) {
+    var shadowThreshold = 0;
+    var highlightThreshold = 255;
 
+    // Find the first non-zero value in the histogram (for shadows)
+    for (var i = 0; i < 256; i++) {
+        if (histogram[i] > 0) {
+            shadowThreshold = i; // This is the start of shadows
+            break;
+        }
+    }
 
+    // Find the last non-zero value in the histogram (for highlights)
+    for (var j = 255; j >= 0; j--) {
+        if (histogram[j] > 0) {
+            highlightThreshold = j; // This is the end of highlights
+            break;
+        }
+    }
+
+    // Add a margin around the thresholds for better results
+    var shadowMargin = 20;
+    var highlightMargin = -20;
+
+    // Return adjusted thresholds
+    return {
+        shadow: Math.min(shadowThreshold + shadowMargin, 255),
+        highlight: Math.max(highlightThreshold + highlightMargin, 0)
+    };
+}
+
+function createLuminositySelection(channelName, threshold) {
+    var channel = doc.channels[channelName]; 
+    doc.selection.load(channel, SelectionType.REPLACE);
+    doc.selection.invert();  // Invert the selection for highlights or shadows
+    doc.selection.expand(threshold);  // Adjust selection size based on threshold
+}
 
 // Initial properties, settings and calculations
 
@@ -240,6 +275,11 @@ try {
 		fogColor.rgb.green = 246;
 		fogColor.rgb.blue = 227;
         
+		var greyColor = new SolidColor();
+		greyColor.rgb.red = 128;
+		greyColor.rgb.green = 128;
+		greyColor.rgb.blue = 128;
+
         // Create a new layer
         var preflashLayer = doc.artLayers.add();
         preflashLayer.name = "Preflash"; // Name the new layer
@@ -273,6 +313,39 @@ try {
 			[192, 192], 
             [255, 255-adjust_whitepoint]  // Lower white point
         ]);
+
+		// 1. Create a new layer
+		var desatLayer = doc.artLayers.add();
+		desatLayer.name = "Desaturation wash";
+
+		// Function to create a selection based on luminosity (dark or light areas)
+		function createLuminositySelection(channelName, threshold) {
+			// Select the specified channel (Red, Green, or Blue)
+			var channel = doc.channels[channelName];
+			
+			// Load the selection based on the channel
+			doc.selection.load(channel, SelectionType.REPLACE);
+			
+			// Adjust the selection based on the threshold value (for shadows or highlights)
+			doc.selection.invert(); // Invert the selection to focus on opposite area (shadows or highlights)
+			
+			// Apply threshold to fine-tune the selection
+			doc.selection.expand(threshold); // Expand or contract to control the spread of the selection
+		}
+
+		// Step 1: Target Shadows (lower luminosity values, darker areas)
+		createLuminositySelection("Red", 20); // Use Red channel and target the shadow areas (lower brightness)
+
+		// Step 2: Target Highlights (higher luminosity values, lighter areas)
+		createLuminositySelection("Red", -30); // Use Red channel and target the highlight areas (higher brightness)
+
+
+		doc.selection.fill(greyColor);
+		doc.selection.deselect();
+
+		// 3. Set blending mode to 'Color' and lower opacity
+		desatLayer.blendMode = BlendMode.COLORBLEND;
+		desatLayer.opacity = 20; // Adjust this! 10% = light desaturation
 
 		imagelayer.applyGaussianBlur(blur_strength/5*doc_scale); // Apply Gaussian blur to the image layer
 
