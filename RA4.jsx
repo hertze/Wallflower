@@ -153,7 +153,7 @@ function processRecipe(runtimesettings) {
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
 	// Check recipe against syntax
-	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|100);(?:[1-9][0-9]?|100);(?:[1-9]|[1-4][0-9]|50);(?:[1-9]|[1-4][0-9]|50);(?:[1-9]|10)$', 'gm');
+	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|10|0)$', 'gm');
 	
 	if (regex.exec(thisRecipe) !== null) {
 		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
@@ -196,8 +196,6 @@ function saveClose() {
 	}
 	doc.close(SaveOptions.DONOTSAVECHANGES);
 }
-
-
 
 // Initial properties, settings and calculations
 
@@ -259,7 +257,6 @@ try {
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
 			[0, 50],
-			[126, 126],   // Slightly adjust shadows
 			[128, 128],
 			[148, 148], // Keep midtones the same
 			[255, 245]  // Slightly adjust highlights
@@ -268,11 +265,12 @@ try {
 		doc.activeChannels = [doc.channels.getByName("b")];
 		doc.activeLayer.adjustCurves([
 			[0, 50],
-			[126, 126],   // Slightly adjust shadows
 			[128, 128],
 			[148, 148], // Keep midtones the same
 			[255, 245]  // Slightly adjust highlights
 		]);
+
+		colorBalance();
 
         // Create a new layer
         var preflashLayer = doc.artLayers.add();
