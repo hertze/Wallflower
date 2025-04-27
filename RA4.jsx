@@ -251,21 +251,21 @@ try {
 		
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
-			[0, 60],   // Slightly adjust shadows
-			[128, 130], // Keep midtones the same
-			[192, 190],
+			[0, 50],
+			[126, 126],   // Slightly adjust shadows
+			[128, 128],
+			[148, 148], // Keep midtones the same
 			[255, 245]  // Slightly adjust highlights
 		]);
 
 		doc.activeChannels = [doc.channels.getByName("b")];
 		doc.activeLayer.adjustCurves([
-			[0, 60],   // Slightly adjust shadows
-			[128, 130], // Keep midtones the same
-			[192, 190],
+			[0, 50],
+			[126, 126],   // Slightly adjust shadows
+			[128, 128],
+			[148, 148], // Keep midtones the same
 			[255, 245]  // Slightly adjust highlights
 		]);
-
-		throw new Error("stop");
 
 		doc.activeChannels = [doc.channels.getByName("Lightness")];
 		doc.activeLayer.adjustCurves([
@@ -276,7 +276,7 @@ try {
 			[255, 245-adjust_whitepoint] // Lower whites slightly
 		]);
 
-		
+		//throw new Error("stop");
 
         // Create a new layer
         var preflashLayer = doc.artLayers.add();
