@@ -228,6 +228,9 @@ if (runtimesettings.recipe != "none") { processRecipe(runtimesettings); }
 try {	
     if (executeScript == true) {
 
+		// Convert to Lab Color
+		doc.changeMode(ChangeMode.LAB);
+
 		// Colors
 		var preflashColor = new SolidColor();
 		preflashColor.hsb.hue = filter_hue; // Use the preflash_hue value
@@ -243,6 +246,37 @@ try {
 		greyColor.rgb.red = 128;
 		greyColor.rgb.green = 128;
 		greyColor.rgb.blue = 128;
+
+
+		
+		doc.activeChannels = [doc.channels.getByName("a")];
+		doc.activeLayer.adjustCurves([
+			[0, 60],   // Slightly adjust shadows
+			[128, 130], // Keep midtones the same
+			[192, 190],
+			[255, 245]  // Slightly adjust highlights
+		]);
+
+		doc.activeChannels = [doc.channels.getByName("b")];
+		doc.activeLayer.adjustCurves([
+			[0, 60],   // Slightly adjust shadows
+			[128, 130], // Keep midtones the same
+			[192, 190],
+			[255, 245]  // Slightly adjust highlights
+		]);
+
+		throw new Error("stop");
+
+		doc.activeChannels = [doc.channels.getByName("Lightness")];
+		doc.activeLayer.adjustCurves([
+			[0, 10+adjust_blackpoint],
+			[64, 66],   // Lift blacks a little
+			[128, 128],
+			[192, 191], 
+			[255, 245-adjust_whitepoint] // Lower whites slightly
+		]);
+
+		
 
         // Create a new layer
         var preflashLayer = doc.artLayers.add();
@@ -269,37 +303,11 @@ try {
 		fogLayer.blendMode = BlendMode.MULTIPLY;
 		fogLayer.opacity = 2;
 
-        // Apply S-curve adjustment directly to the imagelayer
-        imagelayer.adjustCurves([
-            [0, adjust_blackpoint],   // Lift black point
-			[64, 66],  
-			[128, 128], 
-			[192, 191], 
-            [255, 255-adjust_whitepoint]  // Lower white point
-        ]);
-
-		var desatLayer = doc.artLayers.add();
-		desatLayer.name = "Desaturation wash";
-
-		function createLuminositySelection(channelIndex) {
-			var channel = doc.channels[channelIndex];
-			doc.selection.load(channel, SelectionType.REPLACE);
-			doc.selection.invert();
-		}
-		createLuminositySelection(0);
-
-
-		doc.selection.fill(greyColor);
-		doc.selection.deselect();
-
-		// 3. Set blending mode to 'Color' and lower opacity
-		desatLayer.blendMode = BlendMode.COLORBLEND;
-		desatLayer.opacity = 20; // Adjust this! 10% = light desaturation
-
 		imagelayer.applyGaussianBlur(blur_strength/5*doc_scale); // Apply Gaussian blur to the image layer
 
         // Flatten document and save if needed
         doc.flatten();
+		doc.changeMode(ChangeMode.RGB);
         if (save == true) { saveClose(); }
     }
     
