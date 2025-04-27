@@ -11,7 +11,7 @@
 
 // Settings ------------------------------------------------------------
 
-var filter_hue = 30;
+var filter_hue = 35;
 var pre_flash_strength = 3;
 var foglayer_opacity = 2;
 var adjust_blackpoint = 2;
@@ -153,7 +153,7 @@ function processRecipe(runtimesettings) {
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
 	// Check recipe against syntax
-	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|100);(?:[1-9][0-9]?|100);(?:[1-9]|10);(?:[1-9]|[1-4][0-9]|50);(?:[1-9]|[1-4][0-9]|50)$', 'gm');
+	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|100);(?:[1-9][0-9]?|100);(?:[1-9]|[1-4][0-9]|50);(?:[1-9]|[1-4][0-9]|50);(?:[1-9]|10)$', 'gm');
 	
 	if (regex.exec(thisRecipe) !== null) {
 		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
@@ -247,7 +247,14 @@ try {
 		greyColor.rgb.green = 128;
 		greyColor.rgb.blue = 128;
 
-
+		doc.activeChannels = [doc.channels.getByName("Lightness")];
+		doc.activeLayer.adjustCurves([
+			[0, adjust_blackpoint],
+			[64, 66],   // Lift blacks a little
+			[128, 128],
+			[192, 191], 
+			[255, 255 - adjust_whitepoint] // Lower whites slightly
+		]);
 		
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
@@ -266,17 +273,6 @@ try {
 			[148, 148], // Keep midtones the same
 			[255, 245]  // Slightly adjust highlights
 		]);
-
-		doc.activeChannels = [doc.channels.getByName("Lightness")];
-		doc.activeLayer.adjustCurves([
-			[0, adjust_blackpoint],
-			[64, 66],   // Lift blacks a little
-			[128, 128],
-			[192, 191], 
-			[255, 255 - adjust_whitepoint] // Lower whites slightly
-		]);
-
-		//throw new Error("stop");
 
         // Create a new layer
         var preflashLayer = doc.artLayers.add();
