@@ -18,6 +18,16 @@ var adjust_blackpoint = 2;
 var adjust_whitepoint = 5;
 var blur_strength = 5;
 
+var shadow_r = 0;
+var shadow_g = 0;
+var shadow_b = 0;
+var midtone_r = 0;
+var midtone_g = 0;
+var midtone_b = 0;
+var highlight_r = 0;
+var highlight_g = 0;
+var highlight_b = 0;
+
 var save = false;
 
 // ---------------------------------------------------------------------
@@ -201,7 +211,15 @@ function microSmooth(channelName, blurradius) {
 	doc.activeLayer.applyGaussianBlur(doc_scale * blurradius);
 }
 
-
+function colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midtone_b, highlight_r, highlight_g, highlight_b) {
+    // Apply color balance to the image in RGB mode
+    doc.activeLayer.adjustColorBalance(
+            [shadow_r, shadow_g, shadow_b],       // Shadows (red, green, blue)
+            [midtone_r, midtone_g, midtone_b],   // Midtones (red, green, blue)
+            [highlight_r, highlight_g, highlight_b],
+		true // Highlights (red, green, blue)
+    );
+}
 
 // Initial properties, settings and calculations
 
@@ -261,7 +279,7 @@ try {
 			[0, adjust_blackpoint],
 			[64, 66],   // Lift blacks a little
 			[128, 128],
-			[192, 191], 
+			[192, 190], 
 			[255, 255 - adjust_whitepoint] // Lower whites slightly
 		]);
 		
@@ -314,6 +332,9 @@ try {
         // Flatten document and save if needed
         doc.flatten();
 		doc.changeMode(ChangeMode.RGB);
+
+		colorBalance(1, 3, 0, 0, 0, 0, -1, 0, 1); // Example values
+
         if (save == true) { saveClose(); }
     }
     
