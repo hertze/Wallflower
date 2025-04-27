@@ -269,11 +269,11 @@ try {
 
 		doc.activeChannels = [doc.channels.getByName("Lightness")];
 		doc.activeLayer.adjustCurves([
-			[0, 10+adjust_blackpoint],
+			[0, adjust_blackpoint],
 			[64, 66],   // Lift blacks a little
 			[128, 128],
 			[192, 191], 
-			[255, 245-adjust_whitepoint] // Lower whites slightly
+			[255, 255 - adjust_whitepoint] // Lower whites slightly
 		]);
 
 		//throw new Error("stop");
