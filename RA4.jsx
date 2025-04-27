@@ -169,9 +169,6 @@ function processRecipe(runtimesettings) {
 	}
 }
 
-
-
-
 function saveClose() {
 	var file_ending = doc.name.split('.').pop().toLowerCase();
 	var fPath = doc.path;
@@ -196,6 +193,15 @@ function saveClose() {
 	}
 	doc.close(SaveOptions.DONOTSAVECHANGES);
 }
+
+function microSmooth(channelName, blurradius) {
+	// Apply a Gaussian blur to the specified channel
+	var channel = doc.channels.getByName(channelName);
+	doc.activeChannels = [channel];
+	doc.activeLayer.applyGaussianBlur(doc_scale * blurradius);
+}
+
+
 
 // Initial properties, settings and calculations
 
@@ -245,6 +251,11 @@ try {
 		greyColor.rgb.green = 128;
 		greyColor.rgb.blue = 128;
 
+		var blackColor = new SolidColor();
+		blackColor.rgb.red = 0;
+		blackColor.rgb.green = 0;
+		blackColor.rgb.blue = 0;
+
 		doc.activeChannels = [doc.channels.getByName("Lightness")];
 		doc.activeLayer.adjustCurves([
 			[0, adjust_blackpoint],
@@ -270,7 +281,8 @@ try {
 			[255, 245]  // Slightly adjust highlights
 		]);
 
-		colorBalance();
+		microSmooth("a", doc_scale);
+		microSmooth("b", doc_scale);
 
         // Create a new layer
         var preflashLayer = doc.artLayers.add();
