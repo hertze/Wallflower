@@ -163,7 +163,7 @@ function processRecipe(runtimesettings) {
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
 	// Check recipe against syntax
-	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|10|0)$', 'gm');
+	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|10|0);(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0))$', 'gm');
 	
 	if (regex.exec(thisRecipe) !== null) {
 		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
@@ -173,6 +173,15 @@ function processRecipe(runtimesettings) {
 		adjust_blackpoint = parseInt(thisRecipe[3]);
 		adjust_whitepoint = parseInt(thisRecipe[4]);
 		blur_strength = parseInt(thisRecipe[5]);
+		shadow_r = parseInt(thisRecipe[6]);
+		shadow_g = parseInt(thisRecipe[7]);
+		shadow_b = parseInt(thisRecipe[8]);
+		midtone_r = parseInt(thisRecipe[9]);
+		midtone_g = parseInt(thisRecipe[10]);
+		midtone_b = parseInt(thisRecipe[11]);
+		highlight_r = parseInt(thisRecipe[12]);
+		highlight_g = parseInt(thisRecipe[13]);
+		highlight_b = parseInt(thisRecipe[14]);
 	} else {
 		executeScript = false;
 		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
@@ -333,7 +342,7 @@ try {
         doc.flatten();
 		doc.changeMode(ChangeMode.RGB);
 
-		colorBalance(1, 3, 0, 0, 0, 0, -1, 0, 1); // Example values
+		colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midtone_b, highlight_r, highlight_g, highlight_b); // Example values
 
         if (save == true) { saveClose(); }
     }
