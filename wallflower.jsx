@@ -238,36 +238,56 @@ function colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midton
     );
 }
 
-function createLuminanceSelection(rangeStart, rangeEnd) {
-	var lightnessChannel = doc.channels.getByName("Lightness");
-	doc.activeChannels = [lightnessChannel];
+function createLuminanceSelection(thresholdValue, featherAmount, expandAmount) {
+    var doc = app.activeDocument;
 
-	// Clear any existing selection
-	doc.selection.deselect();
+    // Set default values if not provided
+    featherAmount = (featherAmount === undefined) ? 0 : featherAmount;
+    expandAmount = (expandAmount === undefined) ? 0 : expandAmount;
 
-	// Duplicate the Lightness channel to create a temporary channel
-	var tempChannel = lightnessChannel.duplicate();
-	tempChannel.name = "Temp Luminance Selection";
+    // Access the Lightness channel
+    var lightnessChannel = doc.channels.getByName("Lightness");
 
-	// Apply Levels adjustment to isolate the luminance range
-	var levelsDescriptor = new ActionDescriptor();
-	var ref = new ActionReference();
-	ref.putProperty(stringIDToTypeID("channel"), stringIDToTypeID("selection"));
-	levelsDescriptor.putReference(stringIDToTypeID("target"), ref);
-	levelsDescriptor.putInteger(stringIDToTypeID("inputRangeStart"), rangeStart);
-	levelsDescriptor.putInteger(stringIDToTypeID("inputRangeEnd"), rangeEnd);
-	levelsDescriptor.putInteger(stringIDToTypeID("outputRangeStart"), 0);
-	levelsDescriptor.putInteger(stringIDToTypeID("outputRangeEnd"), 255);
-	executeAction(stringIDToTypeID("levels"), levelsDescriptor, DialogModes.NO);
+    // Deselect anything
+    doc.selection.deselect();
 
-	// Load the selection from the temporary channel
-	doc.selection.load(tempChannel, SelectionType.REPLACE);
+    // Duplicate the Lightness channel
+    var tempChannel = lightnessChannel.duplicate();
+    tempChannel.name = "Temp Luminance Selection";
 
-	doc.selection.invert(); // Invert the selection to select the desired luminance range
+    // Set the active channel to the temp channel
+    doc.activeChannels = [tempChannel];
 
-	// Remove the temporary channel
-	tempChannel.remove();
+    // Apply Threshold to the temp channel
+    var idThreshold = charIDToTypeID("Thrs");
+    var desc = new ActionDescriptor();
+    var ref = new ActionReference();
+    ref.putEnumerated(charIDToTypeID("Chnl"), charIDToTypeID("Ordn"), charIDToTypeID("Trgt"));
+    desc.putReference(charIDToTypeID("null"), ref);
+    desc.putInteger(charIDToTypeID("Lvl "), thresholdValue); // Note the space after "Lvl"
+    executeAction(idThreshold, desc, DialogModes.NO);
+
+    // Load the selection from the thresholded temp channel
+    doc.selection.load(tempChannel, SelectionType.REPLACE);
+
+    if (thresholdValue < 128) {
+        doc.selection.invert(); // Invert the selection to select the desired range
+    }
+
+    // Apply expansion if requested
+    if (expandAmount !== 0) {
+        doc.selection.expand(expandAmount * doc_scale);
+    }
+
+    // Apply feathering if requested
+    if (featherAmount > 0) {
+        doc.selection.feather(featherAmount * doc_scale);
+    }
+
+    // Clean up: remove the temp channel
+    tempChannel.remove();
 }
+
 
 // Initial properties, settings and calculations
 
@@ -328,7 +348,7 @@ try {
 
 			
 		// Create shadow selection (e.g., luminance range 0-64)
-		createLuminanceSelection(0, 64);
+		createLuminanceSelection(64, doc_scale*2, doc_scale);
 
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
@@ -348,15 +368,7 @@ try {
 		doc.selection.deselect();
 		
 		// Create highlight selection (e.g., luminance range 192-255)
-		createLuminanceSelection(192, 255);
-		
-		// Perform your curves adjustment for highlights here
-		// doc.activeLayer.adjustCurves([...]);
-		
-		// Deselect after highlight adjustment
-		doc.selection.deselect();
-		
-		// ...existing code...
+		createLuminanceSelection(245, doc_scale*3, 0);
 		
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
@@ -371,6 +383,8 @@ try {
 			[128, 128],
 			[255, 245]  // Slightly adjust highlights
 		]);
+
+		doc.selection.deselect();
 
 		microSmooth("a", doc_scale, doc_scale * 3); // blur a-channel some
 		microSmooth("b", doc_scale, doc_scale * 4); // blur b-channel some more
