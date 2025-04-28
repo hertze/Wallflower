@@ -1,4 +1,7 @@
-RA4
+W A L L F L O W E R
+
+A script plugin for Photoshop that emulates the look of a RA-4 processed and scanned photo.
+
 ---
 
 Recipe settings:
