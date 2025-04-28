@@ -238,6 +238,37 @@ function colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midton
     );
 }
 
+function createLuminanceSelection(rangeStart, rangeEnd) {
+	var lightnessChannel = doc.channels.getByName("Lightness");
+	doc.activeChannels = [lightnessChannel];
+
+	// Clear any existing selection
+	doc.selection.deselect();
+
+	// Duplicate the Lightness channel to create a temporary channel
+	var tempChannel = lightnessChannel.duplicate();
+	tempChannel.name = "Temp Luminance Selection";
+
+	// Apply Levels adjustment to isolate the luminance range
+	var levelsDescriptor = new ActionDescriptor();
+	var ref = new ActionReference();
+	ref.putProperty(stringIDToTypeID("channel"), stringIDToTypeID("selection"));
+	levelsDescriptor.putReference(stringIDToTypeID("target"), ref);
+	levelsDescriptor.putInteger(stringIDToTypeID("inputRangeStart"), rangeStart);
+	levelsDescriptor.putInteger(stringIDToTypeID("inputRangeEnd"), rangeEnd);
+	levelsDescriptor.putInteger(stringIDToTypeID("outputRangeStart"), 0);
+	levelsDescriptor.putInteger(stringIDToTypeID("outputRangeEnd"), 255);
+	executeAction(stringIDToTypeID("levels"), levelsDescriptor, DialogModes.NO);
+
+	// Load the selection from the temporary channel
+	doc.selection.load(tempChannel, SelectionType.REPLACE);
+
+	doc.selection.invert(); // Invert the selection to select the desired luminance range
+
+	// Remove the temporary channel
+	tempChannel.remove();
+}
+
 // Initial properties, settings and calculations
 
 var doc = app.activeDocument;
@@ -284,7 +315,7 @@ try {
 		var greyColor = new SolidColor();
 		greyColor.rgb.red = 128;
 		greyColor.rgb.green = 128;
-		greyColor.rgb.blue = 128;
+		greyColor.rgb.blue = 128;		
 
 		doc.activeChannels = [doc.channels.getByName("Lightness")];
 		doc.activeLayer.adjustCurves([
@@ -294,12 +325,15 @@ try {
 			[192, 190], 
 			[255, 255 - adjust_whitepoint] // Lower whites slightly
 		]);
-		
+
+			
+		// Create shadow selection (e.g., luminance range 0-64)
+		createLuminanceSelection(0, 64);
+
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
 			[0, 50],
 			[128, 128],
-			[148, 148], // Keep midtones the same
 			[255, 245]  // Slightly adjust highlights
 		]);
 
@@ -307,7 +341,34 @@ try {
 		doc.activeLayer.adjustCurves([
 			[0, 50],
 			[128, 128],
-			[148, 148], // Keep midtones the same
+			[255, 245]  // Slightly adjust highlights
+		]);
+		
+		// Deselect after shadow adjustment
+		doc.selection.deselect();
+		
+		// Create highlight selection (e.g., luminance range 192-255)
+		createLuminanceSelection(192, 255);
+		
+		// Perform your curves adjustment for highlights here
+		// doc.activeLayer.adjustCurves([...]);
+		
+		// Deselect after highlight adjustment
+		doc.selection.deselect();
+		
+		// ...existing code...
+		
+		doc.activeChannels = [doc.channels.getByName("a")];
+		doc.activeLayer.adjustCurves([
+			[0, 50],
+			[128, 128],
+			[255, 245]  // Slightly adjust highlights
+		]);
+
+		doc.activeChannels = [doc.channels.getByName("b")];
+		doc.activeLayer.adjustCurves([
+			[0, 50],
+			[128, 128],
 			[255, 245]  // Slightly adjust highlights
 		]);
 
