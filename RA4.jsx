@@ -11,7 +11,9 @@
 
 // Settings ------------------------------------------------------------
 
-var filter_hue = 35;
+var pre_flash_r = 19;
+var pre_flash_g = 200;
+var pre_flash_b = 150;
 var pre_flash_strength = 3;
 var foglayer_opacity = 2;
 var adjust_blackpoint = 2;
@@ -58,7 +60,7 @@ var save = false;
 function displayDialog(thisRecipe, saveStatus, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
-	dialog.text = "Print";
+	dialog.text = "RA4";
 	dialog.orientation = "column";
 	dialog.alignChildren = ["left", "top"];
 	dialog.spacing = 10;
@@ -163,25 +165,27 @@ function processRecipe(runtimesettings) {
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
 	// Check recipe against syntax
-	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|10|0);(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0))$', 'gm');
+	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|10|0);(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0))$', 'gm');
 	
 	if (regex.exec(thisRecipe) !== null) {
 		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
-		filter_hue = parseInt(thisRecipe[0]);
-		pre_flash_strength = parseInt(thisRecipe[1]);
-		foglayer_opacity = parseInt(thisRecipe[2]);
-		adjust_blackpoint = parseInt(thisRecipe[3]);
-		adjust_whitepoint = parseInt(thisRecipe[4]);
-		blur_strength = parseInt(thisRecipe[5]);
-		shadow_r = parseInt(thisRecipe[6]);
-		shadow_g = parseInt(thisRecipe[7]);
-		shadow_b = parseInt(thisRecipe[8]);
-		midtone_r = parseInt(thisRecipe[9]);
-		midtone_g = parseInt(thisRecipe[10]);
-		midtone_b = parseInt(thisRecipe[11]);
-		highlight_r = parseInt(thisRecipe[12]);
-		highlight_g = parseInt(thisRecipe[13]);
-		highlight_b = parseInt(thisRecipe[14]);
+		pre_flash_r = parseInt(thisRecipe[0]);
+		pre_flash_g = parseInt(thisRecipe[1]);
+		pre_flash_b = parseInt(thisRecipe[2]);
+		pre_flash_strength = parseInt(thisRecipe[3]);
+		foglayer_opacity = parseInt(thisRecipe[4]);
+		adjust_blackpoint = parseInt(thisRecipe[5]);
+		adjust_whitepoint = parseInt(thisRecipe[6]);
+		blur_strength = parseInt(thisRecipe[7]);
+		shadow_r = parseInt(thisRecipe[8]);
+		shadow_g = parseInt(thisRecipe[9]);
+		shadow_b = parseInt(thisRecipe[10]);
+		midtone_r = parseInt(thisRecipe[11]);
+		midtone_g = parseInt(thisRecipe[12]);
+		midtone_b = parseInt(thisRecipe[13]);
+		highlight_r = parseInt(thisRecipe[14]);
+		highlight_g = parseInt(thisRecipe[15]);
+		highlight_b = parseInt(thisRecipe[16]);
 	} else {
 		executeScript = false;
 		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
@@ -213,11 +217,15 @@ function saveClose() {
 	doc.close(SaveOptions.DONOTSAVECHANGES);
 }
 
-function microSmooth(channelName, blurradius) {
-	// Apply a Gaussian blur to the specified channel
-	var channel = doc.channels.getByName(channelName);
-	doc.activeChannels = [channel];
-	doc.activeLayer.applyGaussianBlur(doc_scale * blurradius);
+function microSmooth(channelName, blurradius, noiseAmount) {
+    // Apply a Gaussian blur to the specified channel
+    var channel = doc.channels.getByName(channelName);
+    doc.activeChannels = [channel];
+    doc.activeLayer.applyGaussianBlur(doc_scale * blurradius);
+	// Add subtle noise to the channel
+	if (noiseAmount > 0) {
+		doc.activeLayer.applyAddNoise(noiseAmount, NoiseDistribution.GAUSSIAN, true);
+	}
 }
 
 function colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midtone_b, highlight_r, highlight_g, highlight_b) {
@@ -264,9 +272,9 @@ try {
 
 		// Colors
 		var preflashColor = new SolidColor();
-		preflashColor.hsb.hue = filter_hue; // Use the preflash_hue value
-		preflashColor.hsb.saturation = 100; // Set saturation to 100%
-		preflashColor.hsb.brightness = 100; // Set brightness to 100%
+		preflashColor.rgb.red = pre_flash_r;
+		preflashColor.rgb.green = pre_flash_g;
+		preflashColor.rgb.blue = pre_flash_b;
 
 		var fogColor = new SolidColor();
 		fogColor.rgb.red = 253;
@@ -277,11 +285,6 @@ try {
 		greyColor.rgb.red = 128;
 		greyColor.rgb.green = 128;
 		greyColor.rgb.blue = 128;
-
-		var blackColor = new SolidColor();
-		blackColor.rgb.red = 0;
-		blackColor.rgb.green = 0;
-		blackColor.rgb.blue = 0;
 
 		doc.activeChannels = [doc.channels.getByName("Lightness")];
 		doc.activeLayer.adjustCurves([
@@ -308,8 +311,8 @@ try {
 			[255, 245]  // Slightly adjust highlights
 		]);
 
-		microSmooth("a", doc_scale);
-		microSmooth("b", doc_scale);
+		microSmooth("a", doc_scale, doc_scale);
+		microSmooth("b", doc_scale, doc_scale);
 
         // Create a new layer
         var preflashLayer = doc.artLayers.add();

@@ -3,18 +3,20 @@ RA4
 
 Recipe settings:
 
-1. Pre-flash filter hue
-2. Opacity of pre-flash layer
-3. Fog layer (paper base) opacity
-4. Black point adjustment from 0
-5. White point adjustment from 255
-6. Blur strength
-7. Shadow R-value
-8. Shadow G-value
-9. Shadow B-value
-10. Midtones R-value
-11. Midtones G-value
-12. Midtones B-value
-13. Highlight R-value
-14. Highlight G-value
-15. Highligt B-value
+1. Pre-flash filter R-value
+2. Pre-flash filter G-value
+3. Pre-flash filter B-value
+4. Opacity of pre-flash layer
+5. Fog layer (paper base) opacity
+6. Black point adjustment from 0
+7. White point adjustment from 255
+8. Blur strength
+9. Shadow R-value
+10. Shadow G-value
+11. Shadow B-value
+12. Midtones R-value
+13. Midtones G-value
+14. Midtones B-value
+15. Highlight R-value
+16. Highlight G-value
+17. Highligt B-value
