@@ -238,55 +238,71 @@ function colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midton
     );
 }
 
-function createLuminanceSelection(thresholdValue, featherAmount, expandAmount) {
-    var doc = app.activeDocument;
-
-    // Set default values if not provided
-    featherAmount = (featherAmount === undefined) ? 0 : featherAmount;
-    expandAmount = (expandAmount === undefined) ? 0 : expandAmount;
-
-    // Access the Lightness channel
-    var lightnessChannel = doc.channels.getByName("Lightness");
-
+function createLuminanceSelection(rangeStart, rangeEnd) {
+    
     // Deselect anything
     doc.selection.deselect();
 
-    // Duplicate the Lightness channel
-    var tempChannel = lightnessChannel.duplicate();
-    tempChannel.name = "Temp Luminance Selection";
+	// Get the lightness channel
+    var lightnessChannel = doc.channels.getByName("Lightness");
 
-    // Set the active channel to the temp channel
-    doc.activeChannels = [tempChannel];
+	doc.selection.load(lightnessChannel, SelectionType.REPLACE, false);
+    
+    
+    // Create a new temporary layer
+    var tempLayer = doc.artLayers.add();
+    tempLayer.name = "Luminance Selection";
+    
+    // Fill with black
+    var blackColor = new SolidColor();
+    blackColor.rgb.red = 0;
+    blackColor.rgb.green = 0;
+    blackColor.rgb.blue = 0;
 
-    // Apply Threshold to the temp channel
-    var idThreshold = charIDToTypeID("Thrs");
-    var desc = new ActionDescriptor();
-    var ref = new ActionReference();
-    ref.putEnumerated(charIDToTypeID("Chnl"), charIDToTypeID("Ordn"), charIDToTypeID("Trgt"));
-    desc.putReference(charIDToTypeID("null"), ref);
-    desc.putInteger(charIDToTypeID("Lvl "), thresholdValue); // Note the space after "Lvl"
-    executeAction(idThreshold, desc, DialogModes.NO);
 
-    // Load the selection from the thresholded temp channel
-    doc.selection.load(tempChannel, SelectionType.REPLACE);
 
-    if (thresholdValue < 128) {
-        doc.selection.invert(); // Invert the selection to select the desired range
-    }
 
-    // Apply expansion if requested
-    if (expandAmount !== 0) {
-        doc.selection.expand(expandAmount * doc_scale);
-    }
 
-    // Apply feathering if requested
-    if (featherAmount > 0) {
-        doc.selection.feather(featherAmount * doc_scale);
-    }
+    doc.selection.fill(blackColor);
+    doc.selection.deselect();
 
-    // Clean up: remove the temp channel
-    tempChannel.remove();
+	throw new Error("Luminance selection failed. Please check the range values.");
+    
+    // Get the lightness channel
+    var lightnessChannel = doc.channels.getByName("Lightness");
+    
+    // Copy the lightness channel to the layer mask
+    tempLayer.addLayerMask();
+    var layerMask = tempLayer.layerMasks[0];
+    
+    // Create selection from lightness range
+    doc.activeChannels = [lightnessChannel];
+    doc.selection.selectAll();
+    doc.selection.store();
+    
+    // Load the selection to the layer mask
+    layerMask.load(doc.selection);
+    doc.selection.deselect();
+    
+    // Apply levels to the layer mask to isolate the desired luminance range
+    tempLayer.applyLevels(rangeStart, 1.0, rangeEnd, 0, 255);
+    
+    // Apply blur to the mask for smoother transitions
+    layerMask.applyGaussianBlur(doc_scale * 1.0);
+    
+    // Load selection from the mask
+    doc.selection.load(layerMask);
+    
+    // Apply feathering for even smoother edges
+    doc.selection.feather(doc_scale * 1.5);
+    
+    // Remove the temporary layer
+    tempLayer.remove();
+    
+    // Restore the original active layer
+    doc.activeLayer = originalLayer;
 }
+
 
 
 // Initial properties, settings and calculations
@@ -348,7 +364,9 @@ try {
 
 			
 		// Create shadow selection (e.g., luminance range 0-64)
-		createLuminanceSelection(64, doc_scale*2, doc_scale);
+		createLuminanceSelection(0,64);
+
+		
 
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
@@ -368,7 +386,7 @@ try {
 		doc.selection.deselect();
 		
 		// Create highlight selection (e.g., luminance range 192-255)
-		createLuminanceSelection(245, doc_scale*3, 0);
+		createLuminanceSelection(192,245);
 		
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
