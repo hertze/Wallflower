@@ -238,65 +238,44 @@ function colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midton
     );
 }
 
-function createLuminanceSelection(rangeStart, rangeEnd) {
-    // Get the lightness channel
-    var lightnessChannel = doc.channels.getByName("Lightness");
+function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
+    
+	// Duplicate the image layer
+	var shadowLayer = imagelayer.duplicate();
+	shadowLayer.name = "Shadow Layer";
 
-    // Duplicate the Lightness channel
-    var maskChannel = lightnessChannel.duplicate();
-    maskChannel.name = "Luminance Mask";
+	// Desaturate the duplicated layer
+	shadowLayer.desaturate();
 
-    // Set the active channel to the mask channel
-    doc.activeChannels = [maskChannel];
+	doc.activeLayer = shadowLayer;
 
-    // Create a curve adjustment descriptor
-    var curveDesc = new ActionDescriptor();
-    var ref = new ActionReference();
-    ref.putEnumerated(charIDToTypeID("Chnl"), charIDToTypeID("Ordn"), charIDToTypeID("Trgt"));
-    curveDesc.putReference(charIDToTypeID("null"), ref);
+	doc.activeChannels = [doc.channels.getByName("Lightness")];
+		//doc.activeLayer.adjustCurves([
+		//	[rangeStart, 0],
+		//	[rangeEnd, 255] // Lower whites slightly
+		//]);
 
-    // Define the curve points
-    var curvePoints = new ActionList();
+	doc.activeLayer.adjustLevels(rangeStart, rangeEnd, 1.0, 0, 255);
 
-    // Add the first point [0, 0]
-    var point1 = new ActionDescriptor();
-    point1.putDouble(charIDToTypeID("Hrzn"), 0);   // x = 0
-    point1.putDouble(charIDToTypeID("Vrtc"), 0);   // y = 0
-    curvePoints.putObject(charIDToTypeID("Pnt "), point1);
+	if (rangeStart < 128) {
+		shadowLayer.invert(); // Invert the layer if the range is in the shadow area
+	}
 
-    // Add the second point [64, 255]
-    var point2 = new ActionDescriptor();
-    point2.putDouble(charIDToTypeID("Hrzn"), 64);  // x = 64
-    point2.putDouble(charIDToTypeID("Vrtc"), 255); // y = 255
-    curvePoints.putObject(charIDToTypeID("Pnt "), point2);
+	var lightnessChannel = doc.channels.getByName("Lightness");
+	
+	// Duplicate the lightness channel into a new channel
+	doc.activeChannels = [lightnessChannel];
+	doc.selection.selectAll();
+	doc.selection.copy();
+	var newChannel = doc.channels.add();
+	newChannel.name = maskName;
+	doc.activeChannels = [newChannel];
+	doc.paste();
+	doc.selection.deselect();
 
-    // Add the curve points to the adjustment descriptor
-    var adjustDesc = new ActionDescriptor();
-    adjustDesc.putList(charIDToTypeID("Crv "), curvePoints);
-    curveDesc.putObject(charIDToTypeID("Adjs"), charIDToTypeID("CrvA"), adjustDesc);
+	shadowLayer.remove(); // Remove the shadow layer
 
-    // Execute the curve adjustment
-    try {
-        executeAction(charIDToTypeID("Crv "), curveDesc, DialogModes.NO);
-    } catch (e) {
-        alert("Error applying curve adjustment: " + e.message);
-        return;
-    }
-
-    // Load the selection from the mask channel
-    try {
-        doc.selection.load(maskChannel, SelectionType.REPLACE);
-    } catch (e) {
-        alert("Error loading selection from mask channel: " + e.message);
-        return;
-    }
-
-    // Clean up: remove the temporary channel
-    try {
-        maskChannel.remove();
-    } catch (e) {
-        alert("Error removing mask channel: " + e.message);
-    }
+	
 }
 
 
@@ -333,6 +312,10 @@ try {
 		// Convert to Lab Color
 		doc.changeMode(ChangeMode.LAB);
 
+		createLuminanceMasks(0,64, "Shadow Mask");
+
+		createLuminanceMasks(192,255, "Highlight Mask");
+
 		// Colors
 		var preflashColor = new SolidColor();
 		preflashColor.rgb.red = pre_flash_r;
@@ -359,43 +342,39 @@ try {
 		]);
 
 			
-		// Create shadow selection (e.g., luminance range 0-64)
-		createLuminanceSelection(0,64);
-
-		
+		// Shadows
+		doc.selection.load(doc.channels.getByName("Shadow Mask"));
 
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
-			[0, 50],
+			[0, 100],
 			[128, 128],
-			[255, 245]  // Slightly adjust highlights
+			[255, 155]
 		]);
 
 		doc.activeChannels = [doc.channels.getByName("b")];
 		doc.activeLayer.adjustCurves([
-			[0, 50],
+			[0, 100],
 			[128, 128],
-			[255, 245]  // Slightly adjust highlights
+			[255, 155]
 		]);
 		
-		// Deselect after shadow adjustment
-		doc.selection.deselect();
-		
-		// Create highlight selection (e.g., luminance range 192-255)
-		createLuminanceSelection(192,245);
+		// Highlights
+		doc.selection.load(doc.channels.getByName("Highlight Mask"));
+	
 		
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
-			[0, 50],
+			[0, 100],
 			[128, 128],
-			[255, 245]  // Slightly adjust highlights
+			[255, 155]
 		]);
 
 		doc.activeChannels = [doc.channels.getByName("b")];
 		doc.activeLayer.adjustCurves([
-			[0, 50],
+			[0, 100],
 			[128, 128],
-			[255, 245]  // Slightly adjust highlights
+			[255, 155]
 		]);
 
 		doc.selection.deselect();
