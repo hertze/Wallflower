@@ -360,7 +360,8 @@ try {
 		// Tint shadows green
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
-			[5, 0],
+			[0, 0],
+			[128, 108],
 			[255, 255]
 		]);
 		
