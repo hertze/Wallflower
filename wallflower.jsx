@@ -399,6 +399,21 @@ try {
 
 		// Gaussian blur
 		imagelayer.applyGaussianBlur(blur_strength/5*doc_scale); // Apply Gaussian blur to the image layer
+		
+		// Remove the mask channels since they're no longer needed
+		try {
+			var shadowMask = doc.channels.getByName("Shadow Mask");
+			if (shadowMask) {
+				shadowMask.remove();
+			}
+		} catch (e) {}
+		
+		try {
+			var highlightMask = doc.channels.getByName("Highlight Mask");
+			if (highlightMask) {
+				highlightMask.remove();
+			}
+		} catch (e) {}
 
         // Flatten document and save if needed
         doc.flatten();
