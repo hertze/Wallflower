@@ -369,8 +369,9 @@ try {
 		doc.selection.deselect();
 
 		// Microscopic smoothing
-		microSmooth("a", doc_scale, doc_scale * 10); // blur a-channel some
-		microSmooth("b", doc_scale, doc_scale * 12); // blur b-channel some more
+		microSmooth("a", doc_scale*2, doc_scale); // blur a-channel some
+		microSmooth("b", doc_scale*3, doc_scale); // blur b-channel some more
+		microSmooth("Lightness", doc_scale*0.2, 0);
 
 		// Paper fog
 		var fogLayer = doc.artLayers.add();
