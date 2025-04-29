@@ -16,9 +16,9 @@ var pre_flash_g = 200;
 var pre_flash_b = 150;
 var pre_flash_strength = 0;
 var foglayer_opacity = 0;
-var adjust_blackpoint = 0;
-var adjust_whitepoint = 0;
-var blur_strength = 5;
+var adjust_shadows = 3;
+var adjust_highlights = 2;
+var blur_strength = 0;
 
 var shadow_r = 0;
 var shadow_g = 0;
@@ -31,7 +31,8 @@ var highlight_g = 0;
 var highlight_b = 0;
 
 var shadow_sat_reduction = 128;
-var highlight_sat_reduction = 32;
+var highlight_sat_reduction = 16;
+var shadow_tint = 5;
 
 var save = false;
 
@@ -177,8 +178,8 @@ function processRecipe(runtimesettings) {
 		pre_flash_b = parseInt(thisRecipe[2]);
 		pre_flash_strength = parseInt(thisRecipe[3]);
 		foglayer_opacity = parseInt(thisRecipe[4]);
-		adjust_blackpoint = parseInt(thisRecipe[5]);
-		adjust_whitepoint = parseInt(thisRecipe[6]);
+		adjust_shadows = parseInt(thisRecipe[5]);
+		adjust_highlights = parseInt(thisRecipe[6]);
 		blur_strength = parseInt(thisRecipe[7]);
 		shadow_r = parseInt(thisRecipe[8]);
 		shadow_g = parseInt(thisRecipe[9]);
@@ -276,11 +277,11 @@ function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
 
 }
 
-function abCurves(adjustment) {
+function abCurves(adjustment, shadow_tint) {
 	doc.activeChannels = [doc.channels.getByName("a")];
 	doc.activeLayer.adjustCurves([
 		[0, adjustment],
-		[128, 128],
+		[128, 128 - shadow_tint],
 		[255, 255 - adjustment]
 	]);
 
@@ -291,6 +292,7 @@ function abCurves(adjustment) {
 		[255, 255 - adjustment]
 	]);
 }
+
 
 // Initial properties, settings and calculations
 
@@ -346,34 +348,29 @@ try {
 
 		doc.activeChannels = [doc.channels.getByName("Lightness")];
 		doc.activeLayer.adjustCurves([
-			[0, adjust_blackpoint],
-			[64, 66],   // Lift blacks a little
+			[0, 0 + Math.floor(adjust_shadows * 1.5)],
+			[64, 64 + adjust_shadows],
 			[128, 128],
-			[192, 190], 
-			[255, 255 - adjust_whitepoint] // Lower whites slightly
+			[192, 192 - adjust_highlights], 
+			[255, 255 - Math.floor(adjust_highlights * 2)]
 		]);
 
 			
 		// Mask shadows
 		doc.selection.load(doc.channels.getByName("Shadow Mask"));
-		abCurves(shadow_sat_reduction);
+		abCurves(shadow_sat_reduction, shadow_tint);
 		// Tint shadows green
 		doc.activeChannels = [doc.channels.getByName("a")];
-		doc.activeLayer.adjustCurves([
-			[0, 0],
-			[128, 108],
-			[255, 255]
-		]);
 		
 		// Mask highlights
 		doc.selection.load(doc.channels.getByName("Highlight Mask"));
-		abCurves(highlight_sat_reduction);
+		abCurves(highlight_sat_reduction, 0);
 
 		doc.selection.deselect();
 
 		// Microscopic smoothing
-		microSmooth("a", doc_scale, doc_scale * 3); // blur a-channel some
-		microSmooth("b", doc_scale, doc_scale * 4); // blur b-channel some more
+		microSmooth("a", doc_scale, doc_scale * 10); // blur a-channel some
+		microSmooth("b", doc_scale, doc_scale * 12); // blur b-channel some more
 
 		// Paper fog
 		var fogLayer = doc.artLayers.add();
