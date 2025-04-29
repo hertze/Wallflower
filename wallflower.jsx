@@ -30,6 +30,9 @@ var highlight_r = 0;
 var highlight_g = 0;
 var highlight_b = 0;
 
+var shadow_sat_reduction = 128;
+var highlight_sat_reduction = 128;
+
 var save = false;
 
 // ---------------------------------------------------------------------
@@ -347,16 +350,16 @@ try {
 
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
-			[0, 100],
+			[0, shadow_sat_reduction],
 			[128, 128],
-			[255, 155]
+			[255, 255 - shadow_sat_reduction]
 		]);
 
 		doc.activeChannels = [doc.channels.getByName("b")];
 		doc.activeLayer.adjustCurves([
-			[0, 100],
+			[0, shadow_sat_reduction],
 			[128, 128],
-			[255, 155]
+			[255, 255 - shadow_sat_reduction]
 		]);
 		
 		// Highlights
@@ -365,16 +368,16 @@ try {
 		
 		doc.activeChannels = [doc.channels.getByName("a")];
 		doc.activeLayer.adjustCurves([
-			[0, 100],
+			[0, highlight_sat_reduction],
 			[128, 128],
-			[255, 155]
+			[255, 255 - highlight_sat_reduction]
 		]);
 
 		doc.activeChannels = [doc.channels.getByName("b")];
 		doc.activeLayer.adjustCurves([
-			[0, 100],
+			[0, highlight_sat_reduction],
 			[128, 128],
-			[255, 155]
+			[255, 255 - highlight_sat_reduction]
 		]);
 
 		doc.selection.deselect();
