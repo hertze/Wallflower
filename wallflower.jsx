@@ -14,10 +14,10 @@
 var pre_flash_r = 255;
 var pre_flash_g = 200;
 var pre_flash_b = 150;
-var pre_flash_strength = 3;
-var foglayer_opacity = 2;
-var adjust_blackpoint = 2;
-var adjust_whitepoint = 5;
+var pre_flash_strength = 0;
+var foglayer_opacity = 0;
+var adjust_blackpoint = 0;
+var adjust_whitepoint = 0;
 var blur_strength = 5;
 
 var shadow_r = 0;
@@ -357,6 +357,12 @@ try {
 		// Mask shadows
 		doc.selection.load(doc.channels.getByName("Shadow Mask"));
 		abCurves(shadow_sat_reduction);
+		// Tint shadows green
+		doc.activeChannels = [doc.channels.getByName("a")];
+		doc.activeLayer.adjustCurves([
+			[5, 0],
+			[255, 255]
+		]);
 		
 		// Mask highlights
 		doc.selection.load(doc.channels.getByName("Highlight Mask"));
