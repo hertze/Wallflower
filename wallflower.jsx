@@ -239,68 +239,64 @@ function colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midton
 }
 
 function createLuminanceSelection(rangeStart, rangeEnd) {
-    
-    // Deselect anything
-    doc.selection.deselect();
-
-	// Get the lightness channel
-    var lightnessChannel = doc.channels.getByName("Lightness");
-
-	doc.selection.load(lightnessChannel, SelectionType.REPLACE, false);
-    
-    
-    // Create a new temporary layer
-    var tempLayer = doc.artLayers.add();
-    tempLayer.name = "Luminance Selection";
-    
-    // Fill with black
-    var blackColor = new SolidColor();
-    blackColor.rgb.red = 0;
-    blackColor.rgb.green = 0;
-    blackColor.rgb.blue = 0;
-
-
-
-
-
-    doc.selection.fill(blackColor);
-    doc.selection.deselect();
-
-	throw new Error("Luminance selection failed. Please check the range values.");
-    
     // Get the lightness channel
     var lightnessChannel = doc.channels.getByName("Lightness");
-    
-    // Copy the lightness channel to the layer mask
-    tempLayer.addLayerMask();
-    var layerMask = tempLayer.layerMasks[0];
-    
-    // Create selection from lightness range
-    doc.activeChannels = [lightnessChannel];
-    doc.selection.selectAll();
-    doc.selection.store();
-    
-    // Load the selection to the layer mask
-    layerMask.load(doc.selection);
-    doc.selection.deselect();
-    
-    // Apply levels to the layer mask to isolate the desired luminance range
-    tempLayer.applyLevels(rangeStart, 1.0, rangeEnd, 0, 255);
-    
-    // Apply blur to the mask for smoother transitions
-    layerMask.applyGaussianBlur(doc_scale * 1.0);
-    
-    // Load selection from the mask
-    doc.selection.load(layerMask);
-    
-    // Apply feathering for even smoother edges
-    doc.selection.feather(doc_scale * 1.5);
-    
-    // Remove the temporary layer
-    tempLayer.remove();
-    
-    // Restore the original active layer
-    doc.activeLayer = originalLayer;
+
+    // Duplicate the Lightness channel
+    var maskChannel = lightnessChannel.duplicate();
+    maskChannel.name = "Luminance Mask";
+
+    // Set the active channel to the mask channel
+    doc.activeChannels = [maskChannel];
+
+    // Create a curve adjustment descriptor
+    var curveDesc = new ActionDescriptor();
+    var ref = new ActionReference();
+    ref.putEnumerated(charIDToTypeID("Chnl"), charIDToTypeID("Ordn"), charIDToTypeID("Trgt"));
+    curveDesc.putReference(charIDToTypeID("null"), ref);
+
+    // Define the curve points
+    var curvePoints = new ActionList();
+
+    // Add the first point [0, 0]
+    var point1 = new ActionDescriptor();
+    point1.putDouble(charIDToTypeID("Hrzn"), 0);   // x = 0
+    point1.putDouble(charIDToTypeID("Vrtc"), 0);   // y = 0
+    curvePoints.putObject(charIDToTypeID("Pnt "), point1);
+
+    // Add the second point [64, 255]
+    var point2 = new ActionDescriptor();
+    point2.putDouble(charIDToTypeID("Hrzn"), 64);  // x = 64
+    point2.putDouble(charIDToTypeID("Vrtc"), 255); // y = 255
+    curvePoints.putObject(charIDToTypeID("Pnt "), point2);
+
+    // Add the curve points to the adjustment descriptor
+    var adjustDesc = new ActionDescriptor();
+    adjustDesc.putList(charIDToTypeID("Crv "), curvePoints);
+    curveDesc.putObject(charIDToTypeID("Adjs"), charIDToTypeID("CrvA"), adjustDesc);
+
+    // Execute the curve adjustment
+    try {
+        executeAction(charIDToTypeID("Crv "), curveDesc, DialogModes.NO);
+    } catch (e) {
+        alert("Error applying curve adjustment: " + e.message);
+        return;
+    }
+
+    // Load the selection from the mask channel
+    try {
+        doc.selection.load(maskChannel, SelectionType.REPLACE);
+    } catch (e) {
+        alert("Error loading selection from mask channel: " + e.message);
+        return;
+    }
+
+    // Clean up: remove the temporary channel
+    try {
+        maskChannel.remove();
+    } catch (e) {
+        alert("Error removing mask channel: " + e.message);
+    }
 }
 
 
