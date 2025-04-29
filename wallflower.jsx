@@ -11,7 +11,7 @@
 
 // Settings ------------------------------------------------------------
 
-var pre_flash_r = 19;
+var pre_flash_r = 255;
 var pre_flash_g = 200;
 var pre_flash_b = 150;
 var pre_flash_strength = 3;
@@ -31,7 +31,7 @@ var highlight_g = 0;
 var highlight_b = 0;
 
 var shadow_sat_reduction = 128;
-var highlight_sat_reduction = 128;
+var highlight_sat_reduction = 32;
 
 var save = false;
 
@@ -43,13 +43,13 @@ var save = false;
 /*
 // BEGIN__HARVEST_EXCEPTION_ZSTRING
 <javascriptresource> 
-<name>RA4</name> 
+<name>Wallflower</name> 
 <menu>automate</menu>
 <enableinfo>true</enableinfo>
 <eventid>f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4</eventid>
 <terminology><![CDATA[<< /Version 1
 					   /Events <<
-					   /f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4 [(RA4) <<
+					   /f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4 [(Wallflower) <<
 					   /recipe [(Recipe) /string]
 					   /savestatus [(Save) /boolean]
 					   >>]
@@ -63,7 +63,7 @@ var save = false;
 function displayDialog(thisRecipe, saveStatus, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
-	dialog.text = "RA4";
+	dialog.text = "Wallflower";
 	dialog.orientation = "column";
 	dialog.alignChildren = ["left", "top"];
 	dialog.spacing = 10;
@@ -253,10 +253,6 @@ function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
 	doc.activeLayer = shadowLayer;
 
 	doc.activeChannels = [doc.channels.getByName("Lightness")];
-		//doc.activeLayer.adjustCurves([
-		//	[rangeStart, 0],
-		//	[rangeEnd, 255] // Lower whites slightly
-		//]);
 
 	doc.activeLayer.adjustLevels(rangeStart, rangeEnd, 1.0, 0, 255);
 
@@ -278,10 +274,23 @@ function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
 
 	shadowLayer.remove(); // Remove the shadow layer
 
-	
 }
 
+function abCurves(adjustment) {
+	doc.activeChannels = [doc.channels.getByName("a")];
+	doc.activeLayer.adjustCurves([
+		[0, adjustment],
+		[128, 128],
+		[255, 255 - adjustment]
+	]);
 
+	doc.activeChannels = [doc.channels.getByName("b")];
+	doc.activeLayer.adjustCurves([
+		[0, adjustment],
+		[128, 128],
+		[255, 255 - adjustment]
+	]);
+}
 
 // Initial properties, settings and calculations
 
@@ -315,8 +324,8 @@ try {
 		// Convert to Lab Color
 		doc.changeMode(ChangeMode.LAB);
 
+		// Create luminance masks
 		createLuminanceMasks(0,64, "Shadow Mask");
-
 		createLuminanceMasks(192,255, "Highlight Mask");
 
 		// Colors
@@ -345,56 +354,19 @@ try {
 		]);
 
 			
-		// Shadows
+		// Mask shadows
 		doc.selection.load(doc.channels.getByName("Shadow Mask"));
-
-		doc.activeChannels = [doc.channels.getByName("a")];
-		doc.activeLayer.adjustCurves([
-			[0, shadow_sat_reduction],
-			[128, 128],
-			[255, 255 - shadow_sat_reduction]
-		]);
-
-		doc.activeChannels = [doc.channels.getByName("b")];
-		doc.activeLayer.adjustCurves([
-			[0, shadow_sat_reduction],
-			[128, 128],
-			[255, 255 - shadow_sat_reduction]
-		]);
+		abCurves(shadow_sat_reduction);
 		
-		// Highlights
+		// Mask highlights
 		doc.selection.load(doc.channels.getByName("Highlight Mask"));
-	
-		
-		doc.activeChannels = [doc.channels.getByName("a")];
-		doc.activeLayer.adjustCurves([
-			[0, highlight_sat_reduction],
-			[128, 128],
-			[255, 255 - highlight_sat_reduction]
-		]);
-
-		doc.activeChannels = [doc.channels.getByName("b")];
-		doc.activeLayer.adjustCurves([
-			[0, highlight_sat_reduction],
-			[128, 128],
-			[255, 255 - highlight_sat_reduction]
-		]);
+		abCurves(highlight_sat_reduction);
 
 		doc.selection.deselect();
 
+		// Microscopic smoothing
 		microSmooth("a", doc_scale, doc_scale * 3); // blur a-channel some
 		microSmooth("b", doc_scale, doc_scale * 4); // blur b-channel some more
-
-        // Create a new layer
-        var preflashLayer = doc.artLayers.add();
-        preflashLayer.name = "Preflash"; // Name the new layer
-        preflashLayer.blendMode = BlendMode.SOFTLIGHT;
-        preflashLayer.opacity = pre_flash_strength;
-
-        // Fill the Preflash layer with the color
-        doc.selection.selectAll();
-        doc.selection.fill(preflashColor);
-        doc.selection.deselect();
 
 		// Paper fog
 		var fogLayer = doc.artLayers.add();
@@ -410,13 +382,25 @@ try {
 		fogLayer.blendMode = BlendMode.MULTIPLY;
 		fogLayer.opacity = 2;
 
+		// Preflash
+		var preflashLayer = doc.artLayers.add();
+		preflashLayer.name = "Preflash"; // Name the new layer
+		preflashLayer.blendMode = BlendMode.SOFTLIGHT;
+		preflashLayer.opacity = pre_flash_strength;
+
+		doc.selection.selectAll();
+		doc.selection.fill(preflashColor);
+		doc.selection.deselect();
+
+		// Gaussian blur
 		imagelayer.applyGaussianBlur(blur_strength/5*doc_scale); // Apply Gaussian blur to the image layer
 
         // Flatten document and save if needed
         doc.flatten();
 		doc.changeMode(ChangeMode.RGB);
 
-		colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midtone_b, highlight_r, highlight_g, highlight_b); // Example values
+		// Final color balance
+		colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midtone_b, highlight_r, highlight_g, highlight_b);
 
         if (save == true) { saveClose(); }
     }
