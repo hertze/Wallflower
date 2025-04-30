@@ -13,13 +13,11 @@ Recipe settings:
 5. Fog layer (paper base) opacity
 6. Black point adjustment from 0
 7. White point adjustment from 255
-8. Blur strength
-9. Shadow R-value
-10. Shadow G-value
-11. Shadow B-value
-12. Midtones R-value
-13. Midtones G-value
-14. Midtones B-value
-15. Highlight R-value
-16. Highlight G-value
-17. Highligt B-value
+8. Adjustment for black point
+9. Adjustment for shadow point (positive number moves up, negative down)
+10. Adjustment for midpoint (positive number moves up, negative down)
+11. Adjustment for highlights point (positive number moves up, negative down)
+12. Adjustment for white point
+13. Shadow saturation reduction
+14. Highlight saturation reduction.
+15. Shadow tint (negative value adds green, positive magenta)
