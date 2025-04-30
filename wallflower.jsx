@@ -18,17 +18,6 @@ var pre_flash_strength = 0;
 var foglayer_opacity = 0;
 var adjust_shadows = 3;
 var adjust_highlights = 2;
-var blur_strength = 0;
-
-var shadow_r = 0;
-var shadow_g = 0;
-var shadow_b = 0;
-var midtone_r = 0;
-var midtone_g = 0;
-var midtone_b = 0;
-var highlight_r = 0;
-var highlight_g = 0;
-var highlight_b = 0;
 
 var shadow_sat_reduction = 128;
 var highlight_sat_reduction = 16;
@@ -169,7 +158,7 @@ function processRecipe(runtimesettings) {
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
 	// Check recipe against syntax
-	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|10|0);(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0));(-?(100|[1-9][0-9]?|0))$', 'gm');
+	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|[1-4][0-9]|50|0)$', 'gm');
 	
 	if (regex.exec(thisRecipe) !== null) {
 		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
@@ -180,16 +169,6 @@ function processRecipe(runtimesettings) {
 		foglayer_opacity = parseInt(thisRecipe[4]);
 		adjust_shadows = parseInt(thisRecipe[5]);
 		adjust_highlights = parseInt(thisRecipe[6]);
-		blur_strength = parseInt(thisRecipe[7]);
-		shadow_r = parseInt(thisRecipe[8]);
-		shadow_g = parseInt(thisRecipe[9]);
-		shadow_b = parseInt(thisRecipe[10]);
-		midtone_r = parseInt(thisRecipe[11]);
-		midtone_g = parseInt(thisRecipe[12]);
-		midtone_b = parseInt(thisRecipe[13]);
-		highlight_r = parseInt(thisRecipe[14]);
-		highlight_g = parseInt(thisRecipe[15]);
-		highlight_b = parseInt(thisRecipe[16]);
 	} else {
 		executeScript = false;
 		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
@@ -396,9 +375,6 @@ try {
 		doc.selection.selectAll();
 		doc.selection.fill(preflashColor);
 		doc.selection.deselect();
-
-		// Gaussian blur
-		imagelayer.applyGaussianBlur(blur_strength/5*doc_scale); // Apply Gaussian blur to the image layer
 		
 		// Remove the mask channels since they're no longer needed
 		try {
@@ -418,9 +394,6 @@ try {
         // Flatten document and save if needed
         doc.flatten();
 		doc.changeMode(ChangeMode.RGB);
-
-		// Final color balance
-		colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midtone_b, highlight_r, highlight_g, highlight_b);
 
         if (save == true) { saveClose(); }
     }
