@@ -336,11 +336,11 @@ try {
 
 		doc.activeChannels = [doc.channels.getByName("Lightness")];
 		doc.activeLayer.adjustCurves([
-			[0, 0 + adjust_blackpoint],
+			[0, Math.max(0, adjust_blackpoint)],
 			[64, 64 + adjust_shadows],
 			[128, 128 + adjust_midtones],
 			[192, 192 + adjust_highlights], 
-			[255, 255 + adjust_whitepoint]
+			[255, Math.min(255, 255 + adjust_whitepoint)]
 		]);
 
 			
