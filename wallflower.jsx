@@ -16,12 +16,15 @@ var pre_flash_g = 200;
 var pre_flash_b = 150;
 var pre_flash_strength = 0;
 var foglayer_opacity = 0;
-var adjust_shadows = 3;
+var adjust_blackpoint = 4;
+var adjust_shadows = 3;	
+var adjust_midtones = 0;
 var adjust_highlights = 2;
+var adjust_whitepoint = 4;
 
 var shadow_sat_reduction = 128;
 var highlight_sat_reduction = 16;
-var shadow_tint = 5;
+var shadow_tint = -5;
 
 var save = false;
 
@@ -158,7 +161,7 @@ function processRecipe(runtimesettings) {
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
 	// Check recipe against syntax
-	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:[1-9]|[1-4][0-9]|50|0);(?:[1-9]|[1-4][0-9]|50|0)$', 'gm');
+	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0)$', 'gm');
 	
 	if (regex.exec(thisRecipe) !== null) {
 		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
@@ -167,8 +170,12 @@ function processRecipe(runtimesettings) {
 		pre_flash_b = parseInt(thisRecipe[2]);
 		pre_flash_strength = parseInt(thisRecipe[3]);
 		foglayer_opacity = parseInt(thisRecipe[4]);
-		adjust_shadows = parseInt(thisRecipe[5]);
-		adjust_highlights = parseInt(thisRecipe[6]);
+		adjust_blackpoint = parseInt(thisRecipe[5]);
+		adjust_shadows = parseInt(thisRecipe[6]);
+		adjust_midtones = parseInt(thisRecipe[7]);
+		adjust_highlights = parseInt(thisRecipe[8]);
+		adjust_whitepoint = parseInt(thisRecipe[9]);
+		shadow_tint = parseInt(thisRecipe[10]);
 	} else {
 		executeScript = false;
 		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
@@ -260,7 +267,7 @@ function abCurves(adjustment, shadow_tint) {
 	doc.activeChannels = [doc.channels.getByName("a")];
 	doc.activeLayer.adjustCurves([
 		[0, adjustment],
-		[128, 128 - shadow_tint],
+		[128, 128 + shadow_tint],
 		[255, 255 - adjustment]
 	]);
 
@@ -327,11 +334,11 @@ try {
 
 		doc.activeChannels = [doc.channels.getByName("Lightness")];
 		doc.activeLayer.adjustCurves([
-			[0, 0 + Math.floor(adjust_shadows * 1.5)],
+			[0, 0 + adjust_blackpoint],
 			[64, 64 + adjust_shadows],
-			[128, 128],
-			[192, 192 - adjust_highlights], 
-			[255, 255 - Math.floor(adjust_highlights * 2)]
+			[128, 128 + adjust_midtones],
+			[192, 192 + adjust_highlights], 
+			[255, 255 + adjust_whitepoint]
 		]);
 
 			
