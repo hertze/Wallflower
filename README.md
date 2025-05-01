@@ -33,7 +33,7 @@ The script simulates the look of photographic prints on paper by applying severa
 
 Wallflower actions are built from recipes (script settings), that determine the resulting look. By default, the images won’t be saved after the script runs, leaving them intact. Because of this, the actions won’t work for automation (such as droplets) just yet. If you make a droplet at this stage you’ll be prompted to save the image on every droplet run.
 
-When you’re ready to have an action save the resulting image, or when you want to edit the recipe of an action, expand the action (click on the right bracket) to show the recorded script name, **Wallflowe**. When you double-click on this, a dialog will open where you can edit the saved recipe. Click the button labeled **Use this recipe** to save your changes.
+When you’re ready to have an action save the resulting image, or when you want to edit the recipe of an action, expand the action (click on the right bracket) to show the recorded script name, **Wallflower**. When you double-click on this, a dialog will open where you can edit the saved recipe. Click the button labeled **Use this recipe** to save your changes.
 
 If you check **Save and close when done** the script will start saving and closing the image after it runs, so leave this unchecked while you’re still trying out different recipes.
 
