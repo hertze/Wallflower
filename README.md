@@ -94,14 +94,14 @@ When all five settings are set to `0`, the curve remains linear. This means no c
 
 ### Inverted S-Curve
 
-The following curve corresponds to the settings `0`, `-10`, `0`, `10`, `0`.  
+The following curve corresponds to the settings `0`, `10`, `0`, `-10`, `0`.  
 This creates an **inverted S-curve**, which reduces overall contrast:
 
 ![Inverted S-curve](/curve-inverted-s.jpg)
 
 ### Flattened Inverted S-Curve
 
-The last example uses settings `5`, `-10`, `0`, `10`, `-4`.  
+The last example uses settings `15`, `10`, `0`, `-10`, `-15`.  
 This creates an **inverted S-curve with lifted blacks and lowered whites**, resulting in a flatter image with reduced dynamic range:
 
 ![Lifted inverted S-curve](/curve-inverteds-lifted.jpg)
