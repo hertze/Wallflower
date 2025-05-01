@@ -58,4 +58,4 @@ A recipe is a text string with script settings that follows a specific syntax. I
 
 ## Controlling contrast
 
-![Neutral curve](https://github.com/hertze/Wallflower/tree/main/curve-neutral.jpg)
+![Neutral curve](/curve-neutral.jpg)
