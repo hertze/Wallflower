@@ -1,8 +1,14 @@
 W A L L F L O W E R
 
+Version 1.0
+
+By Joakim Hertze
+
 A script plugin for Photoshop that emulates the look of a RA-4 processed and scanned photo.
 
 ---
+
+How does it work? The steps.
 
 Recipe settings:
 
@@ -20,4 +26,7 @@ Recipe settings:
 12. Adjustment for white point
 13. Shadow saturation reduction
 14. Highlight saturation reduction.
-15. Shadow tint (negative value adds green, positive magenta)
+15. Shadow tint adjustment (negative value adds green, positive magenta)
+16. Shadow warmth adjustment (negative values adds blue, positive yellow)
+17. Highlights tint adjustment (negative value adds green, positive magenta)
+18. Highlights warmth adjustment (negative values adds blue, positive yellow)

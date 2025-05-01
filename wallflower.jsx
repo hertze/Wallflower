@@ -26,6 +26,8 @@ var shadow_sat_reduction = 128;
 var highlight_sat_reduction = 16;
 var shadow_tint = -5;
 var shadow_warmth = 0;
+var highlight_tint = 0;
+var highlight_warmth = 0;
 
 var save = false;
 
@@ -162,7 +164,7 @@ function processRecipe(runtimesettings) {
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
 	// Check recipe against syntax
-	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:[1-9][0-9]?|1[01][0-9]|12[0-8]|0);(?:[1-9][0-9]?|1[01][0-9]|12[0-8]|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0)$', 'gm');
+	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:[1-9][0-9]?|1[01][0-9]|12[0-8]|0);(?:[1-9][0-9]?|1[01][0-9]|12[0-8]|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0)$', 'gm');
 	
 	if (regex.exec(thisRecipe) !== null) {
 		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
@@ -180,6 +182,8 @@ function processRecipe(runtimesettings) {
 		highlight_sat_reduction = parseInt(thisRecipe[11]);
 		shadow_tint = parseInt(thisRecipe[12]);
 		shadow_warmth = parseInt(thisRecipe[13]);
+		highlight_tint = parseInt(thisRecipe[14]);
+		highlight_warmth = parseInt(thisRecipe[15]);
 	} else {
 		executeScript = false;
 		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
@@ -222,16 +226,6 @@ function microSmooth(channelName, blurradius, noiseAmount) {
 	}
 }
 
-function colorBalance(shadow_r, shadow_g, shadow_b, midtone_r, midtone_g, midtone_b, highlight_r, highlight_g, highlight_b) {
-    // Apply color balance to the image in RGB mode
-    doc.activeLayer.adjustColorBalance(
-            [shadow_r, shadow_g, shadow_b],       // Shadows (red, green, blue)
-            [midtone_r, midtone_g, midtone_b],   // Midtones (red, green, blue)
-            [highlight_r, highlight_g, highlight_b],
-		true // Highlights (red, green, blue)
-    );
-}
-
 function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
     
 	// Duplicate the image layer
@@ -267,18 +261,18 @@ function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
 
 }
 
-function abCurves(adjustment, shadow_tint) {
+function abCurves(adjustment, this_shadow_tint, this_shadow_warmth, this_highlight_tint, this_highlight_warmth) {
 	doc.activeChannels = [doc.channels.getByName("a")];
 	doc.activeLayer.adjustCurves([
 		[0, adjustment],
-		[128, 128 + shadow_tint],
+		[128, 128 + this_shadow_tint + this_highlight_tint],
 		[255, 255 - adjustment]
 	]);
 
 	doc.activeChannels = [doc.channels.getByName("b")];
 	doc.activeLayer.adjustCurves([
 		[0, adjustment],
-		[128, 128],
+		[128, 128 + this_shadow_warmth + this_highlight_warmth],
 		[255, 255 - adjustment]
 	]);
 }
@@ -348,13 +342,13 @@ try {
 			
 		// Mask shadows
 		doc.selection.load(doc.channels.getByName("Shadow Mask"));
-		abCurves(shadow_sat_reduction, shadow_tint);
+		abCurves(shadow_sat_reduction, shadow_tint, shadow_warmth, 0, 0);
 		// Tint shadows green
 		doc.activeChannels = [doc.channels.getByName("a")];
 		
 		// Mask highlights
 		doc.selection.load(doc.channels.getByName("Highlight Mask"));
-		abCurves(highlight_sat_reduction, 0);
+		abCurves(highlight_sat_reduction, 0, 0, highlight_tint, highlight_warmth);
 
 		doc.selection.deselect();
 
