@@ -18,6 +18,17 @@ A script plugin for Photoshop that emulates the look of RA-4 processed and scann
 
 5. Start experimenting by running one of the installed Photoshop actions with an image open.
 
+## What Wallflower does
+
+The script simulates the look of photographic prints on paper by applying several effects:
+
+- **Reduces saturation** in shadows and highlights  
+- **Adds a subtle color cast** and adjusts overall contrast to mimic the tonal characteristics of printed images  
+- **Slightly blurs the color channels** and adds gentle noise to smooth out color transitions  
+- **Overlays a textured cream-colored layer** to replicate the base tone of photographic paper  
+- **Applies an additional color layer** to mimic the *pre-flash* commonly used in RA-4 printing processes
+
+
 ## Using and editing the ready-made actions
 
 Wallflower actions are built from recipes (script settings), that determine the resulting look. By default, the images won’t be saved after the script runs, leaving them intact. Because of this, the actions won’t work for automation (such as droplets) just yet. If you make a droplet at this stage you’ll be prompted to save the image on every droplet run.
@@ -39,23 +50,62 @@ You can make as many actions with different settings as you like.
 A recipe is a text string with script settings that follows a specific syntax. It contains a number of settings, separated by a `;` (semicolon) and an optional blank space for readability. All settings must always be specified and in the following order:
 
 
-1. Pre-flash filter RGB R-value [0--255]
-2. Pre-flash filter RGB G-value [0--255]
-3. Pre-flash filter RGB B-value [0--255]
-4. Opacity of pre-flash layer [0--100]
-5. Fog layer (paper base) opacity [0--100]
-6. Black point adjustment [0--50]
-7. Shadow point adjustment [-50--50; positive number moves up, negative down]
-8. Midpoint adjustment [-50--50; positive number moves up, negative down]
-9. Highlights point adjustment [-50--50; positive number moves up, negative down]
-10. White point adjustment [-50--0; negative number moves down]
-11. Shadow saturation reduction [0-128]
-12. Highlight saturation reduction. [0-128]
-13. Shadow tint adjustment [-50--50; negative value adds green, positive adds magenta)
-14. Shadow warmth adjustment [-50--50; negative values adds blue, positive adds yellow)
-15. Highlights tint adjustment (negative value adds green, positive magenta)
-16. Highlights warmth adjustment (negative values adds blue, positive yellow)
+## Recipe settings
+
+1. **Pre-flash filter RGB – Red**: `[0–255]`  
+2. **Pre-flash filter RGB – Green**: `[0–255]`  
+3. **Pre-flash filter RGB – Blue**: `[0–255]`  
+4. **Pre-flash layer opacity**: `[0–100]`  
+5. **Fog layer (paper base) opacity**: `[0–100]`  
+6. **Black point adjustment**: `[0–50]`  
+7. **Shadow point adjustment**: `[-50 to 50]` — positive moves up, negative moves down  
+8. **Midpoint adjustment**: `[-50 to 50]` — positive moves up, negative moves down  
+9. **Highlight point adjustment**: `[-50 to 50]` — positive moves up, negative moves down  
+10. **White point adjustment**: `[-50 to 0]` — negative moves down  
+11. **Shadow saturation reduction**: `[0–128]`  
+12. **Highlight saturation reduction**: `[0–128]`  
+13. **Shadow tint adjustment**: `[-50 to 50]` — negative adds green, positive adds magenta  
+14. **Shadow warmth adjustment**: `[-50 to 50]` — negative adds blue, positive adds yellow  
+15. **Highlight tint adjustment**: `[-50 to 50]` — negative adds green, positive adds magenta  
+16. **Highlight warmth adjustment**: `[-50 to 50]` — negative adds blue, positive adds yellow
+
+
+This is an example recipe, ready to be pasted into Wallflower:
+
+`255; 245; 225; 10; 10; 4; -1; -3; -5; -10; 128; 16; -5; 0; 0; 0`
 
 ## Controlling contrast
 
+## Contrast Settings: 6 to 10
+
+Settings **6 to 10** control image contrast by adjusting a luminance curve. These settings modify five key points on the curve:
+
+- **Black point**: `[0, 0]`  
+- **Shadow point**: `[64, 64]`  
+- **Midpoint**: `[128, 128]`  
+- **Highlight point**: `[192, 192]`  
+- **White point**: `[255, 255]`
+
+### Neutral Curve
+
+When all five settings are set to `0`, the curve remains linear. This means no change is applied, and contrast stays neutral:
+
 ![Neutral curve](/curve-neutral.jpg)
+
+### Inverted S-Curve
+
+The following curve corresponds to the settings `0`, `-10`, `0`, `10`, `0`.  
+This creates an **inverted S-curve**, which reduces overall contrast:
+
+![Inverted S-curve](/curve-inverted-s.jpg)
+
+### Flattened Inverted S-Curve
+
+The last example uses settings `5`, `-10`, `0`, `10`, `-4`.  
+This creates an **inverted S-curve with lifted blacks and lowered whites**, resulting in a flatter image with reduced dynamic range:
+
+![Lifted inverted S-curve](/curve-inverteds-lifted.jpg)
+
+## License
+
+Wallflower © 2025 by Joakim Hertze is licensed under CC BY 4.0. To view a copy of this license, visit https://creativecommons.org/licenses/by/4.0/
