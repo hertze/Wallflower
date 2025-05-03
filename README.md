@@ -28,7 +28,6 @@ The script simulates the look of photographic prints on paper by applying severa
 - **Overlays a textured cream-colored layer** to replicate the base tone of photographic paper  
 - **Applies an additional color layer** to mimic the *pre-flash* commonly used in RA-4 printing processes
 
-
 ## Using and editing the ready-made actions
 
 Wallflower actions are built from recipes (script settings), that determine the resulting look. By default, the images won’t be saved after the script runs, leaving them intact. Because of this, the actions won’t work for automation (such as droplets) just yet. If you make a droplet at this stage you’ll be prompted to save the image on every droplet run.
@@ -48,9 +47,6 @@ You can make as many actions with different settings as you like.
 ## Recipe settings
 
 A recipe is a text string with script settings that follows a specific syntax. It contains a number of settings, separated by a `;` (semicolon) and an optional blank space for readability. All settings must always be specified and in the following order:
-
-
-## Recipe settings
 
 1. **Pre-flash filter RGB – Red**: `[0–255]`  
 2. **Pre-flash filter RGB – Green**: `[0–255]`  
@@ -74,7 +70,6 @@ This is an example recipe, ready to be pasted into Wallflower:
 
 `255; 245; 225; 10; 10; 4; -1; -3; -5; -10; 128; 16; -5; 0; 0; 0`
 
-## Controlling contrast
 
 ## Contrast Settings: 6 to 10
 
