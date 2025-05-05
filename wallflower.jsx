@@ -222,7 +222,7 @@ function microSmooth(channelName, blurradius, noiseAmount) {
     doc.activeLayer.applyGaussianBlur(doc_scale * blurradius);
 	// Add subtle noise to the channel
 	if (noiseAmount > 0) {
-		doc.activeLayer.applyAddNoise(noiseAmount, NoiseDistribution.GAUSSIAN, true);
+		doc.activeLayer.applyAddNoise(noiseAmount, NoiseDistribution.GAUSSIAN, false);
 	}
 }
 
@@ -355,7 +355,14 @@ try {
 		// Microscopic smoothing
 		microSmooth("a", doc_scale*2, doc_scale); // blur a-channel some
 		microSmooth("b", doc_scale*3, doc_scale); // blur b-channel some more
-		microSmooth("Lightness", doc_scale*0.2, 0);
+
+		// Reduce microcontrast
+		var highpassLayer = imagelayer.duplicate();
+		highpassLayer.name = "Highpass Layer";
+		highpassLayer.applyHighPass(doc_scale*1);
+		highpassLayer.invert();
+		highpassLayer.blendMode = BlendMode.SOFTLIGHT;
+		highpassLayer.merge();
 
 		// Paper fog
 		var fogLayer = doc.artLayers.add();
