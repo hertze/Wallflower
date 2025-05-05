@@ -1,6 +1,6 @@
 // W A L L F L O W E R
 //
-// Version 1
+// Version 1.0 beta
 //
 // by Joakim Hertze (www.hertze.se)
 //
@@ -339,14 +339,11 @@ try {
 			[255, Math.min(255, 255 + adjust_whitepoint)]
 		]);
 
-			
-		// Mask shadows
+		// Shadow curve
 		doc.selection.load(doc.channels.getByName("Shadow Mask"));
 		abCurves(shadow_sat_reduction, shadow_tint, shadow_warmth, 0, 0);
-		// Tint shadows green
-		doc.activeChannels = [doc.channels.getByName("a")];
 		
-		// Mask highlights
+		// Highlight curve
 		doc.selection.load(doc.channels.getByName("Highlight Mask"));
 		abCurves(highlight_sat_reduction, 0, 0, highlight_tint, highlight_warmth);
 
