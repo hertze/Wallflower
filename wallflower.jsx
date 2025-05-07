@@ -29,6 +29,8 @@ var shadow_warmth = 0;
 var highlight_tint = 0;
 var highlight_warmth = 0;
 
+var blur_lightness = true;
+
 var save = false;
 
 // ---------------------------------------------------------------------
@@ -352,14 +354,9 @@ try {
 		// Microscopic smoothing
 		microSmooth("a", doc_scale*2, doc_scale); // blur a-channel some
 		microSmooth("b", doc_scale*3, doc_scale); // blur b-channel some more
-
-		// Reduce microcontrast
-		var highpassLayer = imagelayer.duplicate();
-		highpassLayer.name = "Highpass Layer";
-		highpassLayer.applyHighPass(doc_scale*1);
-		highpassLayer.invert();
-		highpassLayer.blendMode = BlendMode.SOFTLIGHT;
-		highpassLayer.merge();
+		if (blur_lightness == true) {
+			microSmooth("Lightness", doc_scale*0.2, 0); // blur lightness channel
+		}
 
 		// Paper fog
 		var fogLayer = doc.artLayers.add();
