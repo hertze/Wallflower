@@ -352,8 +352,8 @@ try {
 		doc.selection.deselect();
 
 		// Microscopic smoothing
-		microSmooth("a", doc_scale*2, doc_scale); // blur a-channel some
-		microSmooth("b", doc_scale*3, doc_scale); // blur b-channel some more
+		microSmooth("a", doc_scale, doc_scale); // blur a-channel some
+		microSmooth("b", doc_scale*1.5, doc_scale); // blur b-channel some more
 		if (blur_lightness == true) {
 			microSmooth("Lightness", doc_scale*0.2, 0); // blur lightness channel
 		}
