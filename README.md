@@ -65,7 +65,6 @@ A recipe is a text string with script settings that follows a specific syntax. I
 15. **Highlight tint adjustment**: `[-50 to 50]` — negative adds green, positive adds magenta  
 16. **Highlight warmth adjustment**: `[-50 to 50]` — negative adds blue, positive adds yellow
 
-
 This is an example recipe, ready to be pasted into Wallflower:
 
 `255; 245; 225; 10; 10; 4; -1; -3; -5; -10; 128; 16; -5; 0; 0; 0`
@@ -100,6 +99,10 @@ The last example uses settings `15`, `10`, `0`, `-10`, `-15`.
 This creates an **inverted S-curve with lifted blacks and lowered whites**, resulting in a flatter image with reduced dynamic range:
 
 ![Lifted inverted S-curve](/curve-inverteds-lifted.jpg)
+
+## Hardcoded setting
+
+There is one additional setting, **blur_lightness**, not available in recipes. When this is set to `true` the script blurs the lightness channel a tiny bit, softening the overall sharpness of the image.
 
 ## License
 

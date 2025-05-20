@@ -1,6 +1,6 @@
 // W A L L F L O W E R
 //
-// Version 1.0 beta
+// Version 1.0
 //
 // by Joakim Hertze (www.hertze.se)
 //
@@ -9,7 +9,7 @@
 #target photoshop
 
 
-// Settings ------------------------------------------------------------
+// Default settings ------------------------------------------------------------
 
 var pre_flash_r = 255;
 var pre_flash_g = 200;
@@ -29,9 +29,11 @@ var shadow_warmth = 0;
 var highlight_tint = 0;
 var highlight_warmth = 0;
 
-var blur_lightness = true;
-
 var save = false;
+
+// These settings are not used in the recipe
+
+var blur_lightness = false;
 
 // ---------------------------------------------------------------------
 
