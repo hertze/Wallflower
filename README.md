@@ -69,6 +69,15 @@ This is an example recipe, ready to be pasted into Wallflower:
 
 `255; 245; 225; 10; 10; 4; -1; -3; -5; -10; 128; 16; -5; 0; 0; 0`
 
+## Hardcoded settings
+
+In addition to the recipe settings, there are a number of settings only available in the script file itself.
+
+1. **blur_lightness**: The amount of blur added to the lightness channel, for a softer look overall.
+2. **blur_a**: The amount of blur added to the a channel.
+3. **blur_b**: The amount of blur added to the b channel.
+4. **blur_ab_noise**: The amount of noise added to the a and b channel after blur has been added.
+
 
 ## Contrast Settings: 6 to 10
 

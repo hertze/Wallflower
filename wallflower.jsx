@@ -1,6 +1,6 @@
 // W A L L F L O W E R
 //
-// Version 1.0
+// Version 1.0.1
 //
 // by Joakim Hertze (www.hertze.se)
 //
@@ -16,15 +16,15 @@ var pre_flash_g = 200;
 var pre_flash_b = 150;
 var pre_flash_strength = 0;
 var foglayer_opacity = 0;
-var adjust_blackpoint = 4;
-var adjust_shadows = 3;	
+var adjust_blackpoint = 0;
+var adjust_shadows = 0;	
 var adjust_midtones = 0;
-var adjust_highlights = 2;
-var adjust_whitepoint = 4;
+var adjust_highlights = 0;
+var adjust_whitepoint = 0;
 
-var shadow_sat_reduction = 128;
-var highlight_sat_reduction = 16;
-var shadow_tint = -5;
+var shadow_sat_reduction = 0;
+var highlight_sat_reduction = 0;
+var shadow_tint = 0;
 var shadow_warmth = 0;
 var highlight_tint = 0;
 var highlight_warmth = 0;
@@ -33,7 +33,10 @@ var save = false;
 
 // These settings are not used in the recipe
 
-var blur_lightness = false;
+var blur_lightness = 0;
+var blur_a = 15;
+var blur_b = 20;
+var blur_ab_noise = 10;
 
 // ---------------------------------------------------------------------
 
@@ -354,10 +357,14 @@ try {
 		doc.selection.deselect();
 
 		// Microscopic smoothing
-		microSmooth("a", doc_scale, doc_scale); // blur a-channel some
-		microSmooth("b", doc_scale*1.5, doc_scale); // blur b-channel some more
-		if (blur_lightness == true) {
-			microSmooth("Lightness", doc_scale*0.2, 0); // blur lightness channel
+		if (blur_a > 0) {
+			microSmooth("a", doc_scale * blur_a / 10, doc_scale * blur_ab_noise / 10); // blur a-channel some
+		}
+		if (blur_b > 0) {
+			microSmooth("b", doc_scale * blur_b / 10, doc_scale * blur_ab_noise / 10); // blur b-channel some more
+		}
+		if (blur_lightness > 0) {
+			microSmooth("Lightness", doc_scale * blur_lightness / 10, 0); // blur lightness channel
 		}
 
 		// Paper fog
