@@ -34,8 +34,8 @@ var save = false;
 // These settings are not used in the recipe
 
 var blur_lightness = 0;
-var blur_a = 15;
-var blur_b = 20;
+var blur_a = 10;
+var blur_b = 15;
 var blur_ab_noise = 10;
 
 // ---------------------------------------------------------------------
