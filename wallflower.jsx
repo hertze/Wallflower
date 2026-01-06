@@ -1,6 +1,6 @@
 // W A L L F L O W E R
 //
-// Version 1.0.1
+// Version 1.0.2
 //
 // by Joakim Hertze (www.hertze.se)
 //
