@@ -1,0 +1,11 @@
+# Quick start guide
+
+1. Quit Photoshop.
+
+2. Copy the script file `Wallflower.jsx` to Photoshop’s scripts folder. On Mac it’s in `/Applications/Photoshop 202x/Presets/Scripts` and on Windows 10 it’s in `C:\Program Files\Adobe\Adobe Photoshop 202x\Presets\Scripts`.
+
+3. Launch Photoshop and make sure the script name **Wallflower** shows up in the menu **File/Automate**.
+
+4. Install the actions by clicking on the hamburger icon (≡) in the actions palette in Photoshop, choose **Load Actions…** and then select all action files (ending in `.atn`) and click on **Open**.
+
+5. Start experimenting by running one of the installed Photoshop actions with an image open (JPEG or TIFF image, in sRGB color space).

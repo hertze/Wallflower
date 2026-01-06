@@ -11,6 +11,10 @@
 
 // Default settings ------------------------------------------------------------
 
+// Channel name for Lightness (change based on Photoshop language)
+// English: "Lightness", German: "Helligkeit", Swedish: "Ljushet"
+var lightness_channel_name = "Lightness";
+
 var pre_flash_r = 255;
 var pre_flash_g = 200;
 var pre_flash_b = 150;
@@ -244,7 +248,7 @@ function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
 
 	doc.activeLayer = shadowLayer;
 
-	doc.activeChannels = [doc.channels.getByName("Lightness")];
+	doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 
 	doc.activeLayer.adjustLevels(rangeStart, rangeEnd, 1.0, 0, 255);
 
@@ -252,7 +256,7 @@ function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
 		shadowLayer.invert(); // Invert the layer if the range is in the shadow area
 	}
 
-	var lightnessChannel = doc.channels.getByName("Lightness");
+	var lightnessChannel = doc.channels.getByName(lightness_channel_name);
 	
 	// Duplicate the lightness channel into a new channel
 	doc.activeChannels = [lightnessChannel];
@@ -337,7 +341,7 @@ try {
 		greyColor.rgb.green = 128;
 		greyColor.rgb.blue = 128;		
 
-		doc.activeChannels = [doc.channels.getByName("Lightness")];
+		doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 		doc.activeLayer.adjustCurves([
 			[0, Math.max(0, adjust_blackpoint)],
 			[64, 64 + adjust_shadows],
@@ -364,7 +368,7 @@ try {
 			microSmooth("b", doc_scale * blur_b / 10, doc_scale * blur_ab_noise / 10); // blur b-channel some more
 		}
 		if (blur_lightness > 0) {
-			microSmooth("Lightness", doc_scale * blur_lightness / 10, 0); // blur lightness channel
+			microSmooth(lightness_channel_name, doc_scale * blur_lightness / 10, 0); // blur lightness channel
 		}
 
 		// Paper fog
