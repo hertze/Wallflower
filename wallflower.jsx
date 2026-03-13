@@ -435,11 +435,12 @@
 					// additional black-point compensation that tapers toward highlights
 					var base = damped(v);
 					var t = v / 255.0;
-					var extra = Math.round(blackComp * (1 - t) * (1 - t)); // stronger near 0
+					var extra = Math.round(blackComp * Math.pow(1 - t, 3)); // cubic falloff: much stronger near 0, minimal in midtones
 					return clamp255(base - extra);
 				}
 				imagelayer.adjustCurves([
 					[0, comp(0)],
+					[32, comp(32)],
 					[64, comp(64)],
 					[128, comp(128)],
 					[192, comp(192)],
