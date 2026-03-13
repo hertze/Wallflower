@@ -19,33 +19,25 @@ var pre_flash_r = 255;
 var pre_flash_g = 105;
 var pre_flash_b = 40;
 var pre_flash_strength = 10;
-var foglayer_opacity = 0;
-var adjust_blackpoint = 0;
-var adjust_shadows = 0;	
-var adjust_midtones = 0;
-var adjust_highlights = 0;
-var adjust_whitepoint = 0;
-
-var shadow_sat_reduction = 0;
-var highlight_sat_reduction = 0;
-var shadow_tint = 0;
-var shadow_warmth = 0;
-var highlight_tint = 0;
-var highlight_warmth = 0;
-
-var save = false;
-
-// These settings are not used in the recipe
-
-var blur_lightness = 0;
-var blur_a = 10;
-var blur_b = 15;
-var blur_ab_noise = 10;
 var blur_radius = 3;
-// Auto-adjust preflash based on image shadow content
-var auto_adjust_preflash = true; // enable to let script compute a recommended strength
+var auto_adjust_preflash = true;
+
 var preflash_auto_samples = 5; // grid samples per axis (5x5)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
+
+// Preflash curve tuning (tweak these at the top of the script)
+// - `preflash_damp_max`: maximum overall damp applied to tones (0..1)
+// - `preflash_blackcomp_max`: max additional black-point pull (0..255)
+// - `preflash_mid_blend`: how strongly midtones favor the gentler damped() curve (0..1)
+// - `preflash_min_factor`: lowest allowed multiplier to avoid total crush (0..1)
+// - `preflash_blackshift_max`: max input threshold that will be forced to black (0..255)
+var preflash_damp_max = 0.6;
+var preflash_blackcomp_max = 40;
+var preflash_mid_blend = 0.7;
+var preflash_min_factor = 0.35;
+var preflash_blackshift_max = 12;
+
+var save = false;
 		
 
 // ---------------------------------------------------------------------
@@ -180,27 +172,16 @@ function processRecipe(runtimesettings) {
 	thisRecipe = thisRecipe.replace(/\s+/g, ""); // Removes spaces
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
-	// Check recipe against syntax
-	const regex = new RegExp('^(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5]|0);(?:[1-9][0-9]?|100|0);(?:[1-9][0-9]?|100|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:[1-9][0-9]?|1[01][0-9]|12[0-8]|0);(?:[1-9][0-9]?|1[01][0-9]|12[0-8]|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0);(?:-?[1-9]|-?[1-4][0-9]|-?50|0)$', 'gm');
-	
+	// Check recipe against syntax (R;G;B;strength)
+	const regex = new RegExp('^(?:0|(?:[1-9][0-9]?)|(?:1[0-9][0-9])|(?:2[0-4][0-9])|(?:25[0-5]));(?:0|(?:[1-9][0-9]?)|(?:1[0-9][0-9])|(?:2[0-4][0-9])|(?:25[0-5]));(?:0|(?:[1-9][0-9]?)|(?:1[0-9][0-9])|(?:2[0-4][0-9])|(?:25[0-5]));(?:0|(?:[1-9][0-9]?)|100);(?:0|(?:[1-9][0-9]?)|100)$', 'm');
+
 	if (regex.exec(thisRecipe) !== null) {
 		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
 		pre_flash_r = parseInt(thisRecipe[0]);
 		pre_flash_g = parseInt(thisRecipe[1]);
 		pre_flash_b = parseInt(thisRecipe[2]);
 		pre_flash_strength = parseInt(thisRecipe[3]);
-		foglayer_opacity = parseInt(thisRecipe[4]);
-		adjust_blackpoint = parseInt(thisRecipe[5]);
-		adjust_shadows = parseInt(thisRecipe[6]);
-		adjust_midtones = parseInt(thisRecipe[7]);
-		adjust_highlights = parseInt(thisRecipe[8]);
-		adjust_whitepoint = parseInt(thisRecipe[9]);
-		shadow_sat_reduction = parseInt(thisRecipe[10]);
-		highlight_sat_reduction = parseInt(thisRecipe[11]);
-		shadow_tint = parseInt(thisRecipe[12]);
-		shadow_warmth = parseInt(thisRecipe[13]);
-		highlight_tint = parseInt(thisRecipe[14]);
-		highlight_warmth = parseInt(thisRecipe[15]);
+		blur_radius = parseInt(thisRecipe[4]);
 	} else {
 		executeScript = false;
 		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
@@ -238,24 +219,24 @@ function estimateShadowRatio(samplesPerAxis, threshold) {
 // This avoids creating ColorSamplers (the color picker) which can be slow
 // and intrusive. We approximate dark pixels as those with channel values
 // below `threshold` across R/G/B by averaging per-channel cumulative counts.
-try {
-	var d = app.activeDocument;
-	var totalPixels = d.width.as("px") * d.height.as("px");
-	var rHist = d.channels[0].histogram;
-	var gHist = d.channels[1].histogram;
-	var bHist = d.channels[2].histogram;
-	var t = Math.max(0, Math.min(255, Math.round(threshold)));
-	var sumR = 0, sumG = 0, sumB = 0;
-	for (var i = 0; i <= t; i++) {
-		sumR += rHist[i] || 0;
-		sumG += gHist[i] || 0;
-		sumB += bHist[i] || 0;
+	try {
+		var d = app.activeDocument;
+		var totalPixels = d.width.as("px") * d.height.as("px");
+		var rHist = d.channels[0].histogram;
+		var gHist = d.channels[1].histogram;
+		var bHist = d.channels[2].histogram;
+		var t = Math.max(0, Math.min(255, Math.round(threshold)));
+		var sumR = 0, sumG = 0, sumB = 0;
+		for (var i = 0; i <= t; i++) {
+			sumR += rHist[i] || 0;
+			sumG += gHist[i] || 0;
+			sumB += bHist[i] || 0;
+		}
+		var avgDark = (sumR + sumG + sumB) / 3.0;
+		return totalPixels ? (avgDark / totalPixels) : 0;
+	} catch (e) {
+		return 0; // conservative fallback
 	}
-	var avgDark = (sumR + sumG + sumB) / 3.0;
-	return totalPixels ? (avgDark / totalPixels) : 0;
-} catch (e) {
-	return 0; // conservative fallback
-}
 }
 
 function autoAdjustPreflashStrength(origStrength) {
@@ -376,22 +357,6 @@ function softenImage(layer, radius) {
 	}
 }
 
-function abCurves(adjustment, this_shadow_tint, this_shadow_warmth, this_highlight_tint, this_highlight_warmth) {
-	doc.activeChannels = [doc.channels.getByName("a")];
-	doc.activeLayer.adjustCurves([
-		[0, adjustment],
-		[128, 128 + this_shadow_tint + this_highlight_tint],
-		[255, 255 - adjustment]
-	]);
-
-	doc.activeChannels = [doc.channels.getByName("b")];
-	doc.activeLayer.adjustCurves([
-		[0, adjustment],
-		[128, 128 + this_shadow_warmth + this_highlight_warmth],
-		[255, 255 - adjustment]
-	]);
-}
-
 
 // Initial properties, settings and calculations
 
@@ -465,14 +430,14 @@ try {
 			preflashLayer.merge();
 
 			// Smart preflash compensation: darken more in shadows (including black point), less in highlights.
-			var damp = Math.min(0.6, (pre_flash_strength / 100) * 0.6); // overall strength
-			var blackComp = Math.round((pre_flash_strength / 100) * 40); // max ~40 levels of extra shadow pull
+			var damp = Math.min(preflash_damp_max, (pre_flash_strength / 100) * preflash_damp_max); // overall strength
+			var blackComp = Math.round((pre_flash_strength / 100) * preflash_blackcomp_max); // max extra shadow pull
 			function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
 			function damped(v) {
 				var t = v / 255.0; // 0..1
 				// Use t^2 so highlights (t~1) are barely affected, shadows (t~0) affected more
 				var factor = 1 - damp * (1 - t * t);
-				factor = Math.max(0.35, factor); // avoid total crush
+				factor = Math.max(preflash_min_factor, factor); // avoid total crush
 				return clamp255(v * factor);
 			}
 			function comp(v) {
@@ -483,7 +448,7 @@ try {
 				return clamp255(base - extra);
 			}
 			// Blend midtones back toward the gentler damped() result so midtones are less affected
-			var midBlend = 0.7; // 0..1 where 1 = fully damped (less change), 0 = fully comp (more change)
+			var midBlend = preflash_mid_blend; // 0..1 where 1 = fully damped (less change), 0 = fully comp (more change)
 			var p0 = comp(0);
 			var p32 = comp(32);
 			var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
@@ -491,7 +456,7 @@ try {
 			var p192 = comp(192);
 			var p255 = comp(255);
 			// Optionally force a small input range to map to 0 to restore true blacks
-			var blackShiftInput = Math.round((pre_flash_strength / 100) * 12); // 0..12
+			var blackShiftInput = Math.round((pre_flash_strength / 100) * preflash_blackshift_max); // 0..preflash_blackshift_max
 			var curvePoints = [];
 			curvePoints.push([0, p0]);
 			if (blackShiftInput > 0) {
