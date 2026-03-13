@@ -15,8 +15,8 @@
 	// English: "Lightness", German: "Helligkeit", Swedish: "Ljushet"
 	var lightness_channel_name = "Lightness";
 
-	var pre_flash_r = 155;
-	var pre_flash_g = 156;
+	var pre_flash_r = 250;
+	var pre_flash_g = 60;
 	var pre_flash_b = 0;
 	var pre_flash_strength = 10;
 	var foglayer_opacity = 0;
@@ -420,22 +420,30 @@
 				doc.selection.deselect();
 				preflashLayer.merge();
 
-				// Simple preflash damping: darken more in shadows, less in highlights.
-				var damp = Math.min(0.8, (pre_flash_strength / 100) * 0.8); // overall strength
+				// Smart preflash compensation: darken more in shadows (including black point), less in highlights.
+				var damp = Math.min(0.6, (pre_flash_strength / 100) * 0.6); // overall strength
+				var blackComp = Math.round((pre_flash_strength / 100) * 40); // max ~40 levels of extra shadow pull
 				function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
 				function damped(v) {
 					var t = v / 255.0; // 0..1
-					// Use t^2 so highlights (t~1) are barely affected, shadows (t~0) are affected more
+					// Use t^2 so highlights (t~1) are barely affected, shadows (t~0) affected more
 					var factor = 1 - damp * (1 - t * t);
 					factor = Math.max(0.35, factor); // avoid total crush
 					return clamp255(v * factor);
 				}
+				function comp(v) {
+					// additional black-point compensation that tapers toward highlights
+					var base = damped(v);
+					var t = v / 255.0;
+					var extra = Math.round(blackComp * (1 - t) * (1 - t)); // stronger near 0
+					return clamp255(base - extra);
+				}
 				imagelayer.adjustCurves([
-					[0, damped(0)],
-					[64, damped(64)],
-					[128, damped(128)],
-					[192, damped(192)],
-					[255, damped(255)]
+					[0, comp(0)],
+					[64, comp(64)],
+					[128, comp(128)],
+					[192, comp(192)],
+					[255, comp(255)]
 				]);
 			}
 
@@ -465,7 +473,7 @@
 			doc.selection.invert();
 			doc.selection.clear();
 
-			halationLayer.applyGaussianBlur(doc_scale * blur_radius * 2);
+			halationLayer.applyGaussianBlur(doc_scale * blur_radius * 3);
 			doc.selection.load(doc.channels.getByName("Highlight Mask"), SelectionType.REPLACE);
 			doc.selection.clear();
 
