@@ -15,9 +15,9 @@
 	// English: "Lightness", German: "Helligkeit", Swedish: "Ljushet"
 	var lightness_channel_name = "Lightness";
 
-	var pre_flash_r = 250;
-	var pre_flash_g = 60;
-	var pre_flash_b = 0;
+	var pre_flash_r = 255;
+	var pre_flash_g = 105;
+	var pre_flash_b = 40;
 	var pre_flash_strength = 10;
 	var foglayer_opacity = 0;
 	var adjust_blackpoint = 0;
@@ -42,6 +42,49 @@
 	var blur_b = 15;
 	var blur_ab_noise = 10;
 	var blur_radius = 3;
+	// Auto-adjust preflash based on image shadow content
+	var auto_adjust_preflash = true; // enable to let script compute a recommended strength
+	var preflash_auto_samples = 5; // grid samples per axis (5x5)
+	var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
+
+// Top-level analyzer: estimate shadow pixel ratio by sampling a grid
+function estimateShadowRatio(samplesPerAxis, threshold) {
+	// Use channel histograms to estimate the fraction of dark pixels.
+	// This avoids creating ColorSamplers (the color picker) which can be slow
+	// and intrusive. We approximate dark pixels as those with channel values
+	// below `threshold` across R/G/B by averaging per-channel cumulative counts.
+	try {
+		var d = app.activeDocument;
+		var totalPixels = d.width.as("px") * d.height.as("px");
+		var rHist = d.channels[0].histogram;
+		var gHist = d.channels[1].histogram;
+		var bHist = d.channels[2].histogram;
+		var t = Math.max(0, Math.min(255, Math.round(threshold)));
+		var sumR = 0, sumG = 0, sumB = 0;
+		for (var i = 0; i <= t; i++) {
+			sumR += rHist[i] || 0;
+			sumG += gHist[i] || 0;
+			sumB += bHist[i] || 0;
+		}
+		var avgDark = (sumR + sumG + sumB) / 3.0;
+		return totalPixels ? (avgDark / totalPixels) : 0;
+	} catch (e) {
+		return 0; // conservative fallback
+	}
+}
+
+function autoAdjustPreflashStrength(origStrength) {
+	var ratio = estimateShadowRatio(preflash_auto_samples, preflash_shadow_threshold);
+	// Bias toward brighter images by using 0.4 as the neutral center
+	var biasCenter = 0.3;
+	var m = 1 + (1.5 * (biasCenter - ratio));
+	var out = Math.round(origStrength * m);
+	if (out < 0) out = 0;
+	if (out > 100) out = 100;
+	return out;
+}
+
+            
 
 	// ---------------------------------------------------------------------
 
@@ -263,7 +306,6 @@
 			if (rangeStart < 128) {
 				tempLayer.invert(); // Invert for shadow ranges to get mask
 			}
-
 			// Optionally blur the temporary mask before creating the channel
 			if (blurRadius && blurRadius > 0) {
 				tempLayer.applyGaussianBlur(blurRadius);
@@ -409,6 +451,10 @@
 			greyColor.rgb.blue = 128;
 
 			// Preflash
+			if (auto_adjust_preflash) {
+				pre_flash_strength = autoAdjustPreflashStrength(pre_flash_strength);
+				alert("Recommended preflash strength based on image analysis: " + pre_flash_strength);
+			}
 			if (pre_flash_strength > 0) {
 				var preflashLayer = doc.artLayers.add();
 				preflashLayer.name = "Preflash";
@@ -438,14 +484,30 @@
 					var extra = Math.round(blackComp * Math.pow(1 - t, 3)); // cubic falloff: much stronger near 0, minimal in midtones
 					return clamp255(base - extra);
 				}
-				imagelayer.adjustCurves([
-					[0, comp(0)],
-					[32, comp(32)],
-					[64, comp(64)],
-					[128, comp(128)],
-					[192, comp(192)],
-					[255, comp(255)]
+				// Blend midtones back toward the gentler damped() result so midtones are less affected
+				var midBlend = 0.7; // 0..1 where 1 = fully damped (less change), 0 = fully comp (more change)
+				var p0 = comp(0);
+				var p32 = comp(32);
+				var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
+				var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
+				var p192 = comp(192);
+				var p255 = comp(255);
+				// Optionally force a small input range to map to 0 to restore true blacks
+				var blackShiftInput = Math.round((pre_flash_strength / 100) * 12); // 0..12
+				var curvePoints = [];
+				curvePoints.push([0, p0]);
+				if (blackShiftInput > 0) {
+					// Map the small input threshold down to 0 to recover blackpoint
+					curvePoints.push([blackShiftInput, 0]);
+				}
+				curvePoints = curvePoints.concat([
+					[32, p32],
+					[64, p64],
+					[128, p128],
+					[192, p192],
+					[255, p255]
 				]);
+				imagelayer.adjustCurves(curvePoints);
 			}
 
 			// Lower micro contrast
