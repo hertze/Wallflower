@@ -1,6 +1,6 @@
 // W A L L F L O W E R
 //
-// Version 1.0.2
+// Version 2 beta
 //
 // by Joakim Hertze (www.hertze.se)
 //
@@ -16,9 +16,9 @@
 var lightness_channel_name = "Lightness";
 
 var pre_flash_r = 255;
-var pre_flash_g = 200;
-var pre_flash_b = 150;
-var pre_flash_strength = 0;
+var pre_flash_g = 130;
+var pre_flash_b = 0;
+var pre_flash_strength = 10;
 var foglayer_opacity = 0;
 var adjust_blackpoint = 0;
 var adjust_shadows = 0;	
@@ -41,6 +41,7 @@ var blur_lightness = 0;
 var blur_a = 10;
 var blur_b = 15;
 var blur_ab_noise = 10;
+var blur_radius = 3;
 
 // ---------------------------------------------------------------------
 
@@ -237,39 +238,101 @@ function microSmooth(channelName, blurradius, noiseAmount) {
 	}
 }
 
-function createLuminanceMasks(rangeStart, rangeEnd, maskName) {
-    
-	// Duplicate the image layer
-	var shadowLayer = imagelayer.duplicate();
-	shadowLayer.name = "Shadow Layer";
+function createLuminanceMasks(rangeStart, rangeEnd, maskName, blurRadius) {
 
-	// Desaturate the duplicated layer
-	shadowLayer.desaturate();
+	// Work in RGB mode: create a temporary desaturated layer,
+	// adjust its levels to isolate the luminance range, then
+	// copy that result into a new alpha/channel.
+	var originalActiveLayer = doc.activeLayer;
+	var originalChannels = doc.activeChannels;
+	var tempLayer = null;
 
-	doc.activeLayer = shadowLayer;
+	try {
+		tempLayer = imagelayer.duplicate();
+		tempLayer.name = maskName + " Temp";
 
-	doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+		// Desaturate the duplicated layer to get luminance-like values
+		tempLayer.desaturate();
 
-	doc.activeLayer.adjustLevels(rangeStart, rangeEnd, 1.0, 0, 255);
+		doc.activeLayer = tempLayer;
 
-	if (rangeStart < 128) {
-		shadowLayer.invert(); // Invert the layer if the range is in the shadow area
+		// Apply levels to the layer to isolate the requested range
+		// adjustLevels on a layer modifies its pixels (RGB) which is fine
+		tempLayer.adjustLevels(rangeStart, rangeEnd, 1.0, 0, 255);
+
+		if (rangeStart < 128) {
+			tempLayer.invert(); // Invert for shadow ranges to get mask
+		}
+
+		// Optionally blur the temporary mask before creating the channel
+		if (blurRadius && blurRadius > 0) {
+			tempLayer.applyGaussianBlur(blurRadius);
+		}
+
+		// Copy the temporary layer's pixels and paste into a new channel
+		doc.selection.selectAll();
+		doc.selection.copy();
+
+		var newChannel = doc.channels.add();
+		newChannel.name = maskName;
+		doc.activeChannels = [newChannel];
+		doc.paste();
+		doc.selection.deselect();
+
+		// Clean up temporary layer
+		tempLayer.remove();
+	} catch (e) {
+		try { if (doc.selection) doc.selection.deselect(); } catch (ee) {}
+		try { if (tempLayer) tempLayer.remove(); } catch (ee) {}
+		throw e;
+	} finally {
+		try { doc.activeChannels = originalChannels; } catch (e) {}
+		try { doc.activeLayer = originalActiveLayer; } catch (e) {}
 	}
 
-	var lightnessChannel = doc.channels.getByName(lightness_channel_name);
-	
-	// Duplicate the lightness channel into a new channel
-	doc.activeChannels = [lightnessChannel];
-	doc.selection.selectAll();
-	doc.selection.copy();
-	var newChannel = doc.channels.add();
-	newChannel.name = maskName;
-	doc.activeChannels = [newChannel];
-	doc.paste();
-	doc.selection.deselect();
+}
 
-	shadowLayer.remove(); // Remove the shadow layer
+function softenImage(layer, radius) {
+    var doc = app.activeDocument;
+    var originalLayer = doc.activeLayer;
+    var originalChannels = doc.activeChannels;
 
+    var hpLayer = layer.duplicate();
+    hpLayer.name = "High Pass";
+    hpLayer.applyHighPass(radius * 2);
+    hpLayer.invert();
+
+    // Make the HP layer active and copy its pixels to the clipboard
+    doc.activeLayer = hpLayer;
+
+    var hpChannel = null;
+    try {
+        doc.selection.selectAll();
+        doc.selection.copy();
+
+        // Create a new channel and paste the clipboard into it
+        hpChannel = doc.channels.add();
+        hpChannel.name = "HP Channel";
+        doc.activeChannels = [hpChannel];
+        doc.paste();
+
+        // Load the HP channel into the selection, switch back to the original layer
+        doc.selection.load(hpChannel, SelectionType.REPLACE);
+        doc.selection.contract(radius); // Expand the selection by 1 pixel to ensure we cover the edges
+        doc.activeLayer = layer;
+
+        // Apply blur to the original layer using the selection
+        layer.applyGaussianBlur(radius);
+
+    } catch (e) {
+        // If anything fails, swallow the error to avoid leaving document in a bad state
+    } finally {
+        try { doc.selection.deselect(); } catch (e) {}
+        try { if (hpChannel) hpChannel.remove(); } catch (e) {}
+        try { if (hpLayer) hpLayer.remove(); } catch (e) {}
+        try { doc.activeChannels = originalChannels; } catch (e) {}
+        try { doc.activeLayer = originalLayer; } catch (e) {}
+    }
 }
 
 function abCurves(adjustment, this_shadow_tint, this_shadow_warmth, this_highlight_tint, this_highlight_warmth) {
@@ -318,12 +381,16 @@ if (runtimesettings.recipe != "none") { processRecipe(runtimesettings); }
 try {	
     if (executeScript == true) {
 
-		// Convert to Lab Color
-		doc.changeMode(ChangeMode.LAB);
+		// Upgrade to 16-bit if needed
+		if (BitsPerChannelType.SIXTEEN) {
+			var was16Bit = true;
+			doc.bitsPerChannel = BitsPerChannelType.SIXTEEN;
+		}
 
-		// Create luminance masks
-		createLuminanceMasks(0,64, "Shadow Mask");
-		createLuminanceMasks(192,255, "Highlight Mask");
+		// Create luminance masks (pass scaled blur radius)
+		createLuminanceMasks(0,255, "Whole Mask", doc_scale * blur_radius);
+		createLuminanceMasks(0,64, "Shadow Mask", 0);
+		createLuminanceMasks(192,255, "Highlight Mask", 0);
 
 		// Colors
 		var preflashColor = new SolidColor();
@@ -339,7 +406,56 @@ try {
 		var greyColor = new SolidColor();
 		greyColor.rgb.red = 128;
 		greyColor.rgb.green = 128;
-		greyColor.rgb.blue = 128;		
+		greyColor.rgb.blue = 128;
+
+		// Preflash
+
+		var preflashLayer = doc.artLayers.add();
+		preflashLayer.name = "Preflash"; // Name the new layer
+		preflashLayer.blendMode = BlendMode.LINEARDODGE;
+		preflashLayer.opacity = pre_flash_strength;
+		
+		doc.selection.load(doc.channels.getByName("Whole Mask"));
+		doc.selection.fill(preflashColor);
+		doc.selection.deselect();
+
+		preflashLayer.merge();
+
+		// Lower micro contrast
+
+		var microContratLayer = imagelayer.duplicate();
+		microContratLayer.name = "Micro Contrast";
+		microContratLayer.blendMode = BlendMode.LUMINOSITY;
+		microContratLayer.opacity = 30;
+
+		microContratLayer.applyGaussianBlur(doc_scale * 0.8);
+		microContratLayer.merge();
+
+		// Soften image
+		if (blur_radius > 0) {
+			softenImage(doc.activeLayer, doc_scale * blur_radius);
+		}
+
+		// Halation
+		var halationLayer = imagelayer.duplicate();
+		halationLayer.name = "Halation";
+		halationLayer.blendMode = BlendMode.LINEARDODGE;
+		halationLayer.opacity = 20;
+
+		doc.activeLayer = halationLayer;
+
+		doc.selection.load(doc.channels.getByName("Highlight Mask"));
+		doc.selection.invert();
+		doc.selection.clear();
+
+		halationLayer.applyGaussianBlur(doc_scale * blur_radius * 2);
+		doc.selection.load(doc.channels.getByName("Highlight Mask"), SelectionType.REPLACE);
+		doc.selection.clear();
+
+		halationLayer.merge();
+
+		// Convert to Lab Color
+		doc.changeMode(ChangeMode.LAB);
 
 		doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 		doc.activeLayer.adjustCurves([
@@ -360,40 +476,24 @@ try {
 
 		doc.selection.deselect();
 
-		// Microscopic smoothing
-		if (blur_a > 0) {
-			microSmooth("a", doc_scale * blur_a / 10, doc_scale * blur_ab_noise / 10); // blur a-channel some
-		}
-		if (blur_b > 0) {
-			microSmooth("b", doc_scale * blur_b / 10, doc_scale * blur_ab_noise / 10); // blur b-channel some more
-		}
-		if (blur_lightness > 0) {
-			microSmooth(lightness_channel_name, doc_scale * blur_lightness / 10, 0); // blur lightness channel
-		}
+		doc.changeMode(ChangeMode.RGB);
 
-		// Paper fog
-		var fogLayer = doc.artLayers.add();
-		fogLayer.name = "Paper Fog";
+		// Grain
+		var grainLayer = imagelayer.duplicate();
+		grainLayer.name = "Grain";
+		grainLayer.blendMode = BlendMode.SOFTLIGHT;
+		grainLayer.opacity = 50;
 
+		doc.activeLayer = grainLayer;
 		doc.selection.selectAll();
-		doc.selection.fill(fogColor);
+		doc.selection.fill(greyColor)
+		grainLayer.applyAddNoise(doc_scale*10, NoiseDistribution.GAUSSIAN, true);
+		doc.selection.load(doc.channels.getByName("Whole Mask"));
+		doc.selection.invert();
+		doc.selection.clear();
 		doc.selection.deselect();
+		grainLayer.merge();
 
-		fogLayer.applyAddNoise(doc_scale*2, NoiseDistribution.GAUSSIAN, false); // Add noise to the fog layer
-		fogLayer.applyGaussianBlur(doc_scale); // Apply Gaussian blur to the fog layer
-
-		fogLayer.blendMode = BlendMode.MULTIPLY;
-		fogLayer.opacity = 2;
-
-		// Preflash
-		var preflashLayer = doc.artLayers.add();
-		preflashLayer.name = "Preflash"; // Name the new layer
-		preflashLayer.blendMode = BlendMode.SOFTLIGHT;
-		preflashLayer.opacity = pre_flash_strength;
-
-		doc.selection.selectAll();
-		doc.selection.fill(preflashColor);
-		doc.selection.deselect();
 		
 		// Remove the mask channels since they're no longer needed
 		try {
@@ -412,7 +512,11 @@ try {
 
         // Flatten document and save if needed
         doc.flatten();
-		doc.changeMode(ChangeMode.RGB);
+		
+		// Restore bits per channel if changed
+		if (was16Bit) {
+			doc.bitsPerChannel = BitsPerChannelType.EIGHT;
+		}
 
         if (save == true) { saveClose(); }
     }
