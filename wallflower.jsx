@@ -420,18 +420,14 @@
 				doc.selection.deselect();
 				preflashLayer.merge();
 
-				// Damp overall brightness based on preflash strength.
-				// Preserve highlights but darken shadows more (stronger, non-linear emphasis).
-				var damp = Math.min(0.95, (pre_flash_strength / 100) * 0.95);
-				// Larger shadow boost to increase deep-shadow darkening when preflash is strong.
-				var shadowBoost = Math.min(1.2, (pre_flash_strength / 100) * 1.0);
+				// Simple preflash damping: darken more in shadows, less in highlights.
+				var damp = Math.min(0.8, (pre_flash_strength / 100) * 0.8); // overall strength
 				function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
 				function damped(v) {
 					var t = v / 255.0; // 0..1
-					var inv = 1 - t; // 1 in shadows, 0 in highlights
-					// Emphasize shadows non-linearly: inv + shadowBoost * inv^2
-					var emphasis = inv + shadowBoost * (inv * inv);
-					var factor = 1 - damp * emphasis;
+					// Use t^2 so highlights (t~1) are barely affected, shadows (t~0) are affected more
+					var factor = 1 - damp * (1 - t * t);
+					factor = Math.max(0.35, factor); // avoid total crush
 					return clamp255(v * factor);
 				}
 				imagelayer.adjustCurves([
