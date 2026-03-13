@@ -453,7 +453,6 @@ function autoAdjustPreflashStrength(origStrength) {
 			// Preflash
 			if (auto_adjust_preflash) {
 				pre_flash_strength = autoAdjustPreflashStrength(pre_flash_strength);
-				alert("Recommended preflash strength based on image analysis: " + pre_flash_strength);
 			}
 			if (pre_flash_strength > 0) {
 				var preflashLayer = doc.artLayers.add();
@@ -541,30 +540,6 @@ function autoAdjustPreflashStrength(origStrength) {
 			doc.selection.clear();
 
 			halationLayer.merge();
-
-			// Convert to Lab Color
-			doc.changeMode(ChangeMode.LAB);
-
-			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
-			doc.activeLayer.adjustCurves([
-				[0, Math.max(0, adjust_blackpoint)],
-				[64, 64 + adjust_shadows],
-				[128, 128 + adjust_midtones],
-				[192, 192 + adjust_highlights], 
-				[255, Math.min(255, 255 + adjust_whitepoint)]
-			]);
-
-			// Shadow curve
-			doc.selection.load(doc.channels.getByName("Shadow Mask"));
-			abCurves(shadow_sat_reduction, shadow_tint, shadow_warmth, 0, 0);
-			
-			// Highlight curve
-			doc.selection.load(doc.channels.getByName("Highlight Mask"));
-			abCurves(highlight_sat_reduction, 0, 0, highlight_tint, highlight_warmth);
-
-			doc.selection.deselect();
-
-			doc.changeMode(ChangeMode.RGB);
 
 			// Grain
 			var grainLayer = imagelayer.duplicate();
