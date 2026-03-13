@@ -15,10 +15,10 @@
 	// English: "Lightness", German: "Helligkeit", Swedish: "Ljushet"
 	var lightness_channel_name = "Lightness";
 
-	var pre_flash_r = 133;
-	var pre_flash_g = 92;
-	var pre_flash_b = 56;
-	var pre_flash_strength = 20;
+	var pre_flash_r = 155;
+	var pre_flash_g = 156;
+	var pre_flash_b = 0;
+	var pre_flash_strength = 10;
 	var foglayer_opacity = 0;
 	var adjust_blackpoint = 0;
 	var adjust_shadows = 0;	
@@ -420,13 +420,18 @@
 				doc.selection.deselect();
 				preflashLayer.merge();
 
-				// Damp overall brightness based on preflash strength,
-				// but reduce the effect towards highlights so they aren't crushed.
-				var damp = Math.min(0.6, (pre_flash_strength / 100) * 0.6); // 0..0.6 max
+				// Damp overall brightness based on preflash strength.
+				// Preserve highlights but darken shadows more (stronger, non-linear emphasis).
+				var damp = Math.min(0.95, (pre_flash_strength / 100) * 0.95);
+				// Larger shadow boost to increase deep-shadow darkening when preflash is strong.
+				var shadowBoost = Math.min(1.2, (pre_flash_strength / 100) * 1.0);
 				function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
 				function damped(v) {
 					var t = v / 255.0; // 0..1
-					var factor = 1 - damp * (1 - t); // factor -> 1 for highlights, 1-damp for shadows
+					var inv = 1 - t; // 1 in shadows, 0 in highlights
+					// Emphasize shadows non-linearly: inv + shadowBoost * inv^2
+					var emphasis = inv + shadowBoost * (inv * inv);
+					var factor = 1 - damp * emphasis;
 					return clamp255(v * factor);
 				}
 				imagelayer.adjustCurves([
