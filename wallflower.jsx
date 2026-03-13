@@ -57,6 +57,7 @@ var save = false;
 					/f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4 [(Wallflower) <<
 					/recipe [(Recipe) /string]
 					/savestatus [(Save) /boolean]
+					/autoadjust [(AutoAdjust) /boolean]
 					>>]
 						>>
 					>> ]]></terminology>
@@ -65,7 +66,7 @@ var save = false;
 */
 
 
-function displayDialog(thisRecipe, saveStatus, runmode) {
+function displayDialog(thisRecipe, saveStatus, autoAdjust, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
 	dialog.text = "Wallflower";
@@ -87,6 +88,14 @@ function displayDialog(thisRecipe, saveStatus, runmode) {
 	dialog.edittext1.size = [500, 50];
 	dialog.edittext1.text = thisRecipe ? thisRecipe : '';
 	
+	// Auto-adjust preflash checkbox
+	dialog.autoadjust = dialog.add("checkbox", undefined, "Auto-adjust preflash");
+	if (autoAdjust !== undefined) {
+		dialog.autoadjust.value = (autoAdjust.toLowerCase() === "true");
+	} else {
+		dialog.autoadjust.value = auto_adjust_preflash;
+	}
+
 	dialog.savestatus = dialog.add("checkbox", undefined, "Save and close when done");
 	if (saveStatus !== undefined) {
 		dialog.savestatus.value = (saveStatus.toLowerCase() === "true");
@@ -101,6 +110,7 @@ function displayDialog(thisRecipe, saveStatus, runmode) {
 	submit.onClick = function () {
 		thisRecipe = dialog.edittext1.text;
 		saveStatus = dialog.savestatus.value.toString();
+		autoAdjust = dialog.autoadjust.value.toString();
 		dialog.close();
 	};
 	
@@ -119,7 +129,8 @@ function displayDialog(thisRecipe, saveStatus, runmode) {
 
 	return {
 		"recipe": thisRecipe,
-		"savestatus": saveStatus
+		"savestatus": saveStatus,
+		"autoadjust": autoAdjust
 	};
 }
 
@@ -134,21 +145,25 @@ function getRecipe() {
 			var d = new ActionDescriptor;
 			d.putString(stringIDToTypeID('recipe'), result.recipe);
 			d.putString(stringIDToTypeID('savestatus'), result.savestatus);
-			app.playbackParameters = d;		
+			d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
+			app.playbackParameters = d;        
 			return result;
 		}
 	}
 	else {
 		var recipe = app.playbackParameters.getString(stringIDToTypeID('recipe'));
 		var savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus'));
+		var autoadjust = null;
+		try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(e) { autoadjust = undefined; }
 		
 		if (app.playbackDisplayDialogs == DialogModes.ALL) {
 			// user run action in dialog mode (edit action step)
-			var result = displayDialog(recipe, savestatus, "edit");
+			var result = displayDialog(recipe, savestatus, autoadjust, "edit");
 			if (!result.recipe || result.recipe == "") { isCancelled = true; return } else {
 				var d = new ActionDescriptor;
 				d.putString(stringIDToTypeID('recipe'), result.recipe);
 				d.putString(stringIDToTypeID('savestatus'), result.savestatus);
+				d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
 				app.playbackParameters = d;
 			}
 			executeScript = false;
@@ -158,7 +173,8 @@ function getRecipe() {
 			// user run script without recording
 			return {
 				"recipe": recipe,
-				"savestatus": savestatus
+				"savestatus": savestatus,
+				"autoadjust": autoadjust
 			};
 		}
 	}
@@ -168,6 +184,7 @@ function processRecipe(runtimesettings) {
 	// Process the recipe and change settings
 	var thisRecipe = runtimesettings.recipe;
 	var saveStatus = runtimesettings.savestatus;
+	var autoAdjustSetting = runtimesettings.autoadjust;
 	save = (saveStatus.toLowerCase() === "true");
 	thisRecipe = thisRecipe.replace(/\s+/g, ""); // Removes spaces
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
@@ -182,6 +199,10 @@ function processRecipe(runtimesettings) {
 		pre_flash_b = parseInt(thisRecipe[2]);
 		pre_flash_strength = parseInt(thisRecipe[3]);
 		blur_radius = parseInt(thisRecipe[4]);
+		// Apply autoadjust setting from dialog/playbackParameters if present
+		if (autoAdjustSetting !== undefined && autoAdjustSetting !== null) {
+			auto_adjust_preflash = (autoAdjustSetting.toLowerCase() === "true");
+		}
 	} else {
 		executeScript = false;
 		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
