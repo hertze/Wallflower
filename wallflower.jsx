@@ -39,7 +39,7 @@ var preflash_min_factor = 0.35;
 var preflash_blackshift_max = 12;
 
 // Blackpoint detection and remap settings
-var blackpoint_threshold_fraction = 0.002; // fraction of pixels to consider 'significant' (default 0.2%)
+var blackpoint_threshold_fraction = 0.05; // fraction of pixels to consider 'significant' (default 0.2%)
 var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this darker than post-curve
 
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode (varies by language; "L" is common)
@@ -108,7 +108,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, desat
 
 	// Save original blackpoint checkbox (placed after auto-adjust)
 	// This controls whether we detect & bake the original blackpoint.
-	dialog.saveblack = dialog.add("checkbox", undefined, "Save original blackpoint");
+	dialog.saveblack = dialog.add("checkbox", undefined, "Keep original blackpoint");
 	if (saveBlackParam !== undefined) {
 		dialog.saveblack.value = (saveBlackParam.toLowerCase() === "true");
 	} else {
