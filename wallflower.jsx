@@ -39,8 +39,10 @@ var preflash_min_factor = 0.35;
 var preflash_blackshift_max = 12;
 
 // Blackpoint detection and remap settings
-var blackpoint_threshold_fraction = 0.05; // fraction of pixels to consider 'significant' (default 0.2%)
+var blackpoint_threshold_fraction = 0.002; // fraction of pixels to consider 'significant' (default 0.2%)
 var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this darker than post-curve
+
+var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode (varies by language; "L" is common)
 
 var save = false;
 		
@@ -684,35 +686,19 @@ try {
 			// (Simulation was abandoned because Photoshop's spline interpolation
 			// differs from linear prediction, causing unreliable results.)
 			if (save_blackpoint) {
-				try {
 					var actualPostCurveBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
 					var bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
 					if (actualPostCurveBlack > bp + blackpoint_tolerance) {
-						// Apply an inverted-S in the shadow zone to both restore the black point
-						// and compensate for the increased shadow contrast from the compression.
-						// q1 sits above the straight line (lifts deep shadows = less dark near black),
-						// q2 sits below it (darkens upper shadows), together forming the inverted S.
-						var q1In  = Math.round(actualPostCurveBlack * 0.25);
-						var q1Out = Math.round(bp * 0.35);
-						var q2In  = Math.round(actualPostCurveBlack * 0.75);
-						var q2Out = Math.round(bp * 0.65);
-						var corrPoints;
-						if (q1In > 0 && q1In < q2In && q2In < actualPostCurveBlack) {
-							corrPoints = [
-								[0, 0],
-								[q1In, q1Out],
-								[q2In, q2Out],
-								[actualPostCurveBlack, bp],
-								[128, 128],
-								[255, 255]
-							];
-						} else {
-							// Fallback for very small shadow ranges
-							corrPoints = [[0, 0], [actualPostCurveBlack, bp], [128, 128], [255, 255]];
-						}
-						imagelayer.adjustCurves(corrPoints);
+						doc.changeMode(ChangeMode.LAB);
+						var savedChannels = doc.activeChannels;
+						doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+						var lCurve = [[0, 0], [actualPostCurveBlack, bp]];
+						if (actualPostCurveBlack < 128) lCurve.push([128, 128]);
+						lCurve.push([255, 255]);
+						imagelayer.adjustCurves(lCurve);
+						doc.activeChannels = savedChannels;
+						doc.changeMode(ChangeMode.RGB);
 					}
-				} catch (e) {}
 			}
 		}
 
