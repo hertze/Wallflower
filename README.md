@@ -20,6 +20,7 @@ Open an RGB image, then choose **File → Automate → Wallflower**. A dialog op
 
 - **Recipe field** — paste your recipe string here (see [Recipe format](#recipe-format) below).
 - **Auto-adjust Preflash** — when checked, the script analyses the image histogram and scales the preflash strength up or down depending on how dark the image is. Brighter images get more preflash; darker images get less. Your recipe's preflash opacity is used as the starting point.
+- **Save original blackpoint** — when checked, the script measures where the darkest significant pixels sit in the histogram before processing, then bakes a correction into the preflash compensation curve so the image returns to that same black point after the preflash is applied. Uncheck this if you intentionally want the preflash to lift the blacks, or if you find it produces unexpected results on very dark images.
 - **Reduce Preflash Saturation** — when checked, the script applies an adaptive masked desaturation that absorbs some of the color cast introduced by the preflash. The number field next to it (1–100%) controls how strongly this is applied.
 - **Save and Close When Done** — when checked, the file is saved and closed after processing. Leave this unchecked while experimenting.
 
@@ -106,6 +107,13 @@ These control how the compensation curve behaves after painting the preflash. Th
 - **Minimum tone multiplier (0.0–1.0)** — floor on how far any tone can be darkened. Prevents total tonal crush. Default: `0.35`.
 - **Black point recovery (0–255)** — a small bottom range of input values remapped to pure black after the preflash, to restore a true black point. Scales with preflash strength. A value of `12` means that at full preflash strength the bottom 12 levels are forced to 0. Default: `12`.
 
+### Blackpoint detection sensitivity
+
+These control the histogram analysis used by the **Save original blackpoint** feature.
+
+- **Blackpoint threshold (0.0–1.0)** — the cumulative fraction of pixels that must be counted before a histogram bin is considered the black point. Lower values make detection more sensitive to very sparse dark areas; higher values ignore thin dark tails. Default: `0.002` (0.2%).
+- **Blackpoint tolerance (0–255)** — minimum difference in bins between the initial black point and the simulated post-curve black point before any correction is applied. This prevents the correction from running on images where the curve barely shifted the blacks. Default: `2`.
+
 ### Auto-adjust sensitivity
 
 - **Shadow threshold (0–255)** — how dark a pixel must be to count as shadow when the histogram is analysed. Lower values count fewer pixels as shadows so the auto-adjust will generally apply more preflash. Default: `64`.
@@ -114,7 +122,7 @@ These control how the compensation curve behaves after painting the preflash. Th
 
 ## Using with Photoshop actions
 
-All dialog settings are saved in the recorded action step: the recipe, auto-adjust state, desaturation on/off and the desaturation percent.
+All dialog settings are saved in the recorded action step: the recipe, auto-adjust state, save-blackpoint on/off, desaturation on/off and the desaturation percent.
 
 - When replayed silently, all stored values are used as-is.
 - When the action step is set to show its dialog, it opens pre-filled with the stored values, ready to edit.

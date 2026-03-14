@@ -11,16 +11,13 @@
 
 // Default settings ------------------------------------------------------------
 
-// Channel name for Lightness (change based on Photoshop language)
-// English: "Lightness", German: "Helligkeit", Swedish: "Ljushet"
-var lightness_channel_name = "Lightness";
-
 var pre_flash_r = 255;
 var pre_flash_g = 105;
 var pre_flash_b = 40;
 var pre_flash_strength = 10;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
+var save_blackpoint = true;
 var desaturation = true;
 
 var desat_boost = 0.5; // how strongly to boost desaturation when mask coverage is small (0..1)
@@ -40,6 +37,10 @@ var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
 var preflash_blackshift_max = 12;
+
+// Blackpoint detection and remap settings
+var blackpoint_threshold_fraction = 0.05; // fraction of pixels to consider 'significant' (default 0.2%)
+var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this darker than post-curve
 
 var save = false;
 		
@@ -62,9 +63,10 @@ var save = false;
 					/recipe [(Recipe) /string]
 					/savestatus [(Save) /boolean]
 					/autoadjust [(AutoAdjust) /boolean]
+					/saveblackpoint [(SaveBlackPoint) /boolean]
 					/desaturation [(Desaturation) /boolean]
 					/desatamount [(DesatAmount) /integer]
-					>>]
+					>>
 						>>
 					>> ]]></terminology>
 </javascriptresource>
@@ -72,7 +74,7 @@ var save = false;
 */
 
 
-function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, desatAmountParam, runmode) {
+function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, desatParam, desatAmountParam, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
 	dialog.text = "Wallflower";
@@ -100,6 +102,15 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, desatAmou
 		dialog.autoadjust.value = (autoAdjust.toLowerCase() === "true");
 	} else {
 		dialog.autoadjust.value = auto_adjust_preflash;
+	}
+
+	// Save original blackpoint checkbox (placed after auto-adjust)
+	// This controls whether we detect & bake the original blackpoint.
+	dialog.saveblack = dialog.add("checkbox", undefined, "Save original blackpoint");
+	if (saveBlackParam !== undefined) {
+		dialog.saveblack.value = (saveBlackParam.toLowerCase() === "true");
+	} else {
+		dialog.saveblack.value = save_blackpoint;
 	}
 
 	// Desaturation checkbox + amount (placed before Save checkbox)
@@ -140,6 +151,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, desatAmou
 		saveStatus = dialog.savestatus.value.toString();
 		autoAdjust = dialog.autoadjust.value.toString();
 		desaturation = dialog.desaturation.value.toString();
+		save_blackpoint = dialog.saveblack.value.toString();
 		desaturation_amount_setting = parseInt(dialog.desatAmount.text) || desaturation_amount_setting;
 		dialog.close();
 	};
@@ -161,6 +173,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, desatAmou
 		"recipe": thisRecipe,
 		"savestatus": saveStatus,
 		"autoadjust": autoAdjust,
+		"saveblackpoint": save_blackpoint,
 		"desaturation": desaturation,
 		"desatamount": desaturation_amount_setting
 	};
@@ -180,6 +193,9 @@ function getRecipe() {
 				if (result.autoadjust !== undefined && result.autoadjust !== null) {
 					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
 				}
+				if (result.saveblackpoint !== undefined && result.saveblackpoint !== null) {
+					d.putString(stringIDToTypeID('saveblackpoint'), result.saveblackpoint);
+				}
 				if (result.desaturation !== undefined && result.desaturation !== null) {
 					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
 				}
@@ -194,20 +210,23 @@ function getRecipe() {
 		var recipe = app.playbackParameters.getString(stringIDToTypeID('recipe'));
 		var savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus'));
 		var autoadjust = null;
+		var saveblack = null;
 		var desat = null;
 		var desatamount = null;
 		try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(e) { autoadjust = undefined; }
+		try { saveblack = app.playbackParameters.getString(stringIDToTypeID('saveblackpoint')); } catch(e) { saveblack = undefined; }
 		try { desat = app.playbackParameters.getString(stringIDToTypeID('desaturation')); } catch(e) { desat = undefined; }
 		try { desatamount = app.playbackParameters.getInteger(stringIDToTypeID('desatamount')); } catch(e) { desatamount = undefined; }
 		
 		if (app.playbackDisplayDialogs == DialogModes.ALL) {
 			// user run action in dialog mode (edit action step)
-				var result = displayDialog(recipe, savestatus, autoadjust, desat, desatamount, "edit");
+				var result = displayDialog(recipe, savestatus, autoadjust, saveblack, desat, desatamount, "edit");
 			if (!result.recipe || result.recipe == "") { isCancelled = true; return } else {
 				var d = new ActionDescriptor;
 				d.putString(stringIDToTypeID('recipe'), result.recipe);
 				d.putString(stringIDToTypeID('savestatus'), result.savestatus);
 					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
+					d.putString(stringIDToTypeID('saveblackpoint'), result.saveblackpoint);
 					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
 					d.putInteger(stringIDToTypeID('desatamount'), result.desatamount);
 				app.playbackParameters = d;
@@ -221,6 +240,7 @@ function getRecipe() {
 				"recipe": recipe,
 				"savestatus": savestatus,
 				"autoadjust": autoadjust,
+				"saveblackpoint": saveblack,
 				"desaturation": desat,
 				"desatamount": desatamount
 			};
@@ -235,6 +255,10 @@ function processRecipe(runtimesettings) {
 	var autoAdjustSetting = runtimesettings.autoadjust;
 	var desatSetting = runtimesettings.desaturation;
 	save = (saveStatus.toLowerCase() === "true");
+		// Apply save_blackpoint setting from dialog/playbackParameters if present
+		if (runtimesettings.saveblackpoint !== undefined && runtimesettings.saveblackpoint !== null) {
+			save_blackpoint = (runtimesettings.saveblackpoint.toLowerCase() === "true");
+		}
 	thisRecipe = thisRecipe.replace(/\s+/g, ""); // Removes spaces
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
 	
@@ -432,6 +456,31 @@ function computeMaskCoverage(channelName) {
 	}
 }
 
+// Compute the first 'significant' black histogram bin (0..255) where
+// cumulative pixel count exceeds `thresholdFraction` of the image.
+function computeImageBlackPoint(thresholdFraction) {
+	try {
+		var d = app.activeDocument;
+		var totalPixels = d.width.as("px") * d.height.as("px");
+		var rHist = d.channels[0].histogram;
+		var gHist = d.channels[1].histogram;
+		var bHist = d.channels[2].histogram;
+
+		var threshold = Math.max(0, Math.min(1, (thresholdFraction !== undefined) ? thresholdFraction : blackpoint_threshold_fraction));
+		var cumulative = 0;
+		for (var i = 0; i <= 255; i++) {
+			var avg = ((rHist[i] || 0) + (gHist[i] || 0) + (bHist[i] || 0)) / 3.0;
+			cumulative += avg;
+			if (totalPixels && (cumulative / totalPixels) >= threshold) {
+				return i;
+			}
+		}
+		return 255;
+	} catch (e) {
+		return 0;
+	}
+}
+
 // Apply desaturation using the Whole Mask: duplicates layer, desaturates, masks and merges
 function applyDesaturation(pre_r, pre_g, pre_b, strength) {
 	try {
@@ -542,6 +591,15 @@ try {
 			doc.bitsPerChannel = BitsPerChannelType.SIXTEEN;
 		}
 
+		// Check initial blackpoint
+		// Analyze initial black point (first significant dark bin)
+		var initialBlackPoint = 0;
+		if (save_blackpoint) {
+			try {
+				initialBlackPoint = computeImageBlackPoint(); // use default threshold (configurable)
+			} catch (e) { initialBlackPoint = 0; }
+		}
+
 		// Create luminance masks (pass scaled blur radius)
 		createLuminanceMasks(0,255, "Whole Mask", doc_scale * blur_radius);
 		createLuminanceMasks(0,64, "Shadow Mask", 0);
@@ -619,7 +677,43 @@ try {
 				[192, p192],
 				[255, p255]
 			]);
+			// Apply the preflash compensation curve.
 			imagelayer.adjustCurves(curvePoints);
+			// Restore the original black point: measure the actual post-curve
+			// result and apply a 3-point corrective curves pass only if needed.
+			// (Simulation was abandoned because Photoshop's spline interpolation
+			// differs from linear prediction, causing unreliable results.)
+			if (save_blackpoint) {
+				try {
+					var actualPostCurveBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
+					var bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
+					if (actualPostCurveBlack > bp + blackpoint_tolerance) {
+						// Apply an inverted-S in the shadow zone to both restore the black point
+						// and compensate for the increased shadow contrast from the compression.
+						// q1 sits above the straight line (lifts deep shadows = less dark near black),
+						// q2 sits below it (darkens upper shadows), together forming the inverted S.
+						var q1In  = Math.round(actualPostCurveBlack * 0.25);
+						var q1Out = Math.round(bp * 0.35);
+						var q2In  = Math.round(actualPostCurveBlack * 0.75);
+						var q2Out = Math.round(bp * 0.65);
+						var corrPoints;
+						if (q1In > 0 && q1In < q2In && q2In < actualPostCurveBlack) {
+							corrPoints = [
+								[0, 0],
+								[q1In, q1Out],
+								[q2In, q2Out],
+								[actualPostCurveBlack, bp],
+								[128, 128],
+								[255, 255]
+							];
+						} else {
+							// Fallback for very small shadow ranges
+							corrPoints = [[0, 0], [actualPostCurveBlack, bp], [128, 128], [255, 255]];
+						}
+						imagelayer.adjustCurves(corrPoints);
+					}
+				} catch (e) {}
+			}
 		}
 
 		// Lower micro contrast
