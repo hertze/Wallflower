@@ -48,43 +48,31 @@ If the recipe string is invalid a dialog will tell you and the script will abort
 
 ## What the script does, step by step
 
-### 1. Luminance masks
-Three internal masks are derived from a desaturated copy of the image:
-
-- **Whole Mask** — covers the entire tonal range; used to contain all effects within image data (not blown highlights or pure blacks). Created with the blur radius from the recipe, so it is slightly soft.
-- **Shadow Mask** — covers the darkest quarter of the tonal range.
-- **Highlight Mask** — covers the brightest quarter.
-
-Masks are removed automatically when the script finishes.
-
-### 2. Preflash
+### Preflash
 A wash of colored light is laid over the image using the preflash color and opacity from the recipe, the same way a real darkroom preflash fogs the paper with light before the main exposure.
 
 After painting the preflash, the script applies a compensation curve to pull tones back toward where they were, but in a tonally-aware way: shadows and the black point are corrected more strongly; midtones are corrected gently; highlights are barely touched. This keeps blacks black and prevents a washed-out look, while letting the preflash color cast remain.
 
 If **Auto-adjust Preflash** is on, the preflash strength is scaled by the image histogram before this step.
 
-### 3. Micro contrast reduction
+### Micro contrast reduction
 A very slightly blurred version of the image is subtly laid over the original. This smooths harsh micro contrast and gives a more printed, analogue feel without affecting color.
 
-### 4. Softening
+### Softening
 A high-pass based softening is applied using the blur radius from the recipe. The blur is localised to mid-tone areas so edges soften without losing structure.
 
-### 5. Halation
+### Halation
 A blurred glow bleeds outward from the brightest areas of the image, simulating the way light halates around highlights on film. The halation spread is twice the blur radius from the recipe, and only affects the brightest tones.
 
-### 6. Grain
+### Grain
 Film-like grain is worked into the image, weighted towards darker areas.
 
-### 7. Desaturation (optional)
+### Desaturation (optional)
 When **Reduce Preflash Saturation** is checked, the script applies an adaptive masked desaturation to compensate for increased saturation resulting from the added preflash effect. The strength is determined by:
 
 1. The colorfulness and strength of the preflash — a more vivid or stronger preflash produces more desaturation.
 2. How much of the image the mask covers — a sparse mask (contrasty images) gets a slight boost.
 3. The **%** value you enter — this scales the whole computed result. At 100% the full computed desaturation is applied; at 20% it is one-fifth of that.
-
-### 8. Finalisation
-The document is flattened. If **Save and Close When Done** was checked, the file is saved (TIFF or JPEG based on the file's existing format) and closed.
 
 ---
 
