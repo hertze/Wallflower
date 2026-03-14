@@ -21,6 +21,10 @@ var pre_flash_b = 40;
 var pre_flash_strength = 10;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
+var desaturation = true;
+
+var desaturation_floor = 10; // minimum desaturation percent at strength=0 (to ensure some effect even with white preflash)
+var desat_boost = 0.5; // how strongly to boost desaturation when mask coverage is small (0..1)
 
 var preflash_auto_samples = 5; // grid samples per axis (5x5)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
@@ -58,6 +62,7 @@ var save = false;
 					/recipe [(Recipe) /string]
 					/savestatus [(Save) /boolean]
 					/autoadjust [(AutoAdjust) /boolean]
+					/desaturation [(Desaturation) /boolean]
 					>>]
 						>>
 					>> ]]></terminology>
@@ -66,7 +71,7 @@ var save = false;
 */
 
 
-function displayDialog(thisRecipe, saveStatus, autoAdjust, runmode) {
+function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
 	dialog.text = "Wallflower";
@@ -96,6 +101,14 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, runmode) {
 		dialog.autoadjust.value = auto_adjust_preflash;
 	}
 
+	// Desaturation checkbox (placed before Save checkbox)
+	dialog.desaturation = dialog.add("checkbox", undefined, "Desaturation");
+	if (desatParam !== undefined) {
+		dialog.desaturation.value = (desatParam.toLowerCase() === "true");
+	} else {
+		dialog.desaturation.value = desaturation;
+	}
+
 	dialog.savestatus = dialog.add("checkbox", undefined, "Save and close when done");
 	if (saveStatus !== undefined) {
 		dialog.savestatus.value = (saveStatus.toLowerCase() === "true");
@@ -111,6 +124,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, runmode) {
 		thisRecipe = dialog.edittext1.text;
 		saveStatus = dialog.savestatus.value.toString();
 		autoAdjust = dialog.autoadjust.value.toString();
+		desaturation = dialog.desaturation.value.toString();
 		dialog.close();
 	};
 	
@@ -130,7 +144,8 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, runmode) {
 	return {
 		"recipe": thisRecipe,
 		"savestatus": saveStatus,
-		"autoadjust": autoAdjust
+		"autoadjust": autoAdjust,
+		"desaturation": desaturation
 	};
 }
 
@@ -145,7 +160,12 @@ function getRecipe() {
 			var d = new ActionDescriptor;
 			d.putString(stringIDToTypeID('recipe'), result.recipe);
 			d.putString(stringIDToTypeID('savestatus'), result.savestatus);
-			d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
+				if (result.autoadjust !== undefined && result.autoadjust !== null) {
+					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
+				}
+				if (result.desaturation !== undefined && result.desaturation !== null) {
+					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
+				}
 			app.playbackParameters = d;        
 			return result;
 		}
@@ -154,16 +174,19 @@ function getRecipe() {
 		var recipe = app.playbackParameters.getString(stringIDToTypeID('recipe'));
 		var savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus'));
 		var autoadjust = null;
+		var desat = null;
 		try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(e) { autoadjust = undefined; }
+		try { desat = app.playbackParameters.getString(stringIDToTypeID('desaturation')); } catch(e) { desat = undefined; }
 		
 		if (app.playbackDisplayDialogs == DialogModes.ALL) {
 			// user run action in dialog mode (edit action step)
-			var result = displayDialog(recipe, savestatus, autoadjust, "edit");
+				var result = displayDialog(recipe, savestatus, autoadjust, desat, "edit");
 			if (!result.recipe || result.recipe == "") { isCancelled = true; return } else {
 				var d = new ActionDescriptor;
 				d.putString(stringIDToTypeID('recipe'), result.recipe);
 				d.putString(stringIDToTypeID('savestatus'), result.savestatus);
-				d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
+					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
+					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
 				app.playbackParameters = d;
 			}
 			executeScript = false;
@@ -174,7 +197,8 @@ function getRecipe() {
 			return {
 				"recipe": recipe,
 				"savestatus": savestatus,
-				"autoadjust": autoadjust
+				"autoadjust": autoadjust,
+				"desaturation": desat
 			};
 		}
 	}
@@ -185,6 +209,7 @@ function processRecipe(runtimesettings) {
 	var thisRecipe = runtimesettings.recipe;
 	var saveStatus = runtimesettings.savestatus;
 	var autoAdjustSetting = runtimesettings.autoadjust;
+	var desatSetting = runtimesettings.desaturation;
 	save = (saveStatus.toLowerCase() === "true");
 	thisRecipe = thisRecipe.replace(/\s+/g, ""); // Removes spaces
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
@@ -203,6 +228,10 @@ function processRecipe(runtimesettings) {
 		if (autoAdjustSetting !== undefined && autoAdjustSetting !== null) {
 			auto_adjust_preflash = (autoAdjustSetting.toLowerCase() === "true");
 		}
+			// Apply desaturation setting from dialog/playbackParameters if present
+			if (desatSetting !== undefined && desatSetting !== null) {
+				desaturation = (desatSetting.toLowerCase() === "true");
+			}
 	} else {
 		executeScript = false;
 		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
@@ -333,6 +362,74 @@ function createLuminanceMasks(rangeStart, rangeEnd, maskName, blurRadius) {
 		try { doc.activeLayer = originalActiveLayer; } catch (e) {}
 	}
 
+}
+
+// Compute desaturation amount (percent) from preflash color and strength
+function computeDesaturationAmount(r_in, g_in, b_in, strength) {
+	// NOTE: this function now expects coverage to be applied by caller via multiplier.
+	// Base desaturation: 1%..10% mapped from strength (0..100)
+	var base_desat = Math.max(1, Math.min(10, Math.round(1 + (strength / 100) * 9)));
+
+	// Clamp and normalize inputs
+	var r = Math.max(0, Math.min(255, Math.round(r_in || 0)));
+	var g = Math.max(0, Math.min(255, Math.round(g_in || 0)));
+	var b = Math.max(0, Math.min(255, Math.round(b_in || 0)));
+	var maxc = Math.max(r, g, b);
+	var minc = Math.min(r, g, b);
+
+	// Simple estimate of colorfulness: (max-min)/max -> 0..1
+	var colorSat = (maxc > 0) ? ((maxc - minc) / maxc) : 0;
+
+	// Extra desaturation contribution scaled by strength (max ~5%)
+	var extra_scale = 5;
+	var extra_desat = Math.round(colorSat * (strength / 100) * extra_scale);
+
+	// Combine (coverage multiplier applied by caller). Return raw value here.
+	return Math.max(1, Math.min(30, base_desat + extra_desat));
+}
+
+// Compute how much of the provided mask channel is 'on' (0..1 average brightness)
+function computeMaskCoverage(channelName) {
+	try {
+		var d = app.activeDocument;
+		var hist = d.channels.getByName(channelName).histogram;
+		var totalPixels = d.width.as("px") * d.height.as("px");
+		var sum = 0;
+		for (var i = 0; i < hist.length; i++) {
+			sum += (hist[i] || 0) * i;
+		}
+		return totalPixels ? (sum / (255.0 * totalPixels)) : 0;
+	} catch (e) {
+		return 0;
+	}
+}
+
+// Apply desaturation using the Whole Mask: duplicates layer, desaturates, masks and merges
+function applyDesaturation(pre_r, pre_g, pre_b, strength) {
+	try {
+		var coverage = computeMaskCoverage("Whole Mask");
+		var raw_desat = computeDesaturationAmount(pre_r, pre_g, pre_b, strength);
+		var multiplier = 1 + (1 - coverage) * desat_boost; // 1..1+desat_boost
+		var final_desat = Math.max(1, Math.min(30, Math.round(raw_desat * multiplier)));
+
+		var desatLayer = imagelayer.duplicate();
+		desatLayer.name = "Desaturation";
+		desatLayer.blendMode = BlendMode.SATURATION;
+		desatLayer.opacity = final_desat;
+		desatLayer.desaturate();
+
+		app.activeDocument.activeLayer = desatLayer;
+
+		// Load the whole-mask into the selection, clear outside the mask
+		doc.selection.load(doc.channels.getByName("Whole Mask"), SelectionType.REPLACE);
+		doc.selection.invert();
+		doc.selection.clear();
+		doc.selection.deselect();
+
+		desatLayer.merge();
+	} catch (e) {
+		// fail silently; desaturation is non-critical
+	}
 }
 
 function softenImage(layer, radius) {
@@ -512,7 +609,7 @@ try {
 		var halationLayer = imagelayer.duplicate();
 		halationLayer.name = "Halation";
 		halationLayer.blendMode = BlendMode.LINEARDODGE;
-		halationLayer.opacity = 20;
+		halationLayer.opacity = 50;
 
 		doc.activeLayer = halationLayer;
 
@@ -520,10 +617,10 @@ try {
 		doc.selection.invert();
 		doc.selection.clear();
 
-		halationLayer.applyGaussianBlur(doc_scale * blur_radius * 3);
+		halationLayer.applyGaussianBlur(doc_scale * blur_radius * 2);
 		doc.selection.load(doc.channels.getByName("Highlight Mask"), SelectionType.REPLACE);
 		doc.selection.clear();
-
+		doc.selection.deselect();
 		halationLayer.merge();
 
 		// Grain
@@ -542,6 +639,12 @@ try {
 		doc.selection.deselect();
 		grainLayer.merge();
 
+		// Desaturation (now factors preflash color as well as strength)
+		if (desaturation) {
+			// Moved full desaturation flow into helper to measure mask coverage and apply multiplier
+			applyDesaturation(pre_flash_r, pre_flash_g, pre_flash_b, pre_flash_strength);
+
+		}
 		
 		// Remove the mask channels since they're no longer needed
 		try {
