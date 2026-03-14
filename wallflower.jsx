@@ -23,8 +23,8 @@ var blur_radius = 3;
 var auto_adjust_preflash = true;
 var desaturation = true;
 
-var desaturation_floor = 10; // minimum desaturation percent at strength=0 (to ensure some effect even with white preflash)
 var desat_boost = 0.5; // how strongly to boost desaturation when mask coverage is small (0..1)
+var desaturation_amount_setting = 20; // user-editable amount (1..100) used as divisor
 
 var preflash_auto_samples = 5; // grid samples per axis (5x5)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
@@ -63,6 +63,7 @@ var save = false;
 					/savestatus [(Save) /boolean]
 					/autoadjust [(AutoAdjust) /boolean]
 					/desaturation [(Desaturation) /boolean]
+					/desatamount [(DesatAmount) /integer]
 					>>]
 						>>
 					>> ]]></terminology>
@@ -71,7 +72,7 @@ var save = false;
 */
 
 
-function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, runmode) {
+function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, desatAmountParam, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
 	dialog.text = "Wallflower";
@@ -94,22 +95,36 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, runmode) 
 	dialog.edittext1.text = thisRecipe ? thisRecipe : '';
 	
 	// Auto-adjust preflash checkbox
-	dialog.autoadjust = dialog.add("checkbox", undefined, "Auto-adjust preflash");
+	dialog.autoadjust = dialog.add("checkbox", undefined, "Auto-adjust Preflash");
 	if (autoAdjust !== undefined) {
 		dialog.autoadjust.value = (autoAdjust.toLowerCase() === "true");
 	} else {
 		dialog.autoadjust.value = auto_adjust_preflash;
 	}
 
-	// Desaturation checkbox (placed before Save checkbox)
-	dialog.desaturation = dialog.add("checkbox", undefined, "Desaturation");
+	// Desaturation checkbox + amount (placed before Save checkbox)
+	var desatGroup = dialog.add("group");
+	desatGroup.orientation = "row";
+	dialog.desaturation = desatGroup.add("checkbox", undefined, "Reduce Preflash Saturation");
+	dialog.desatAmount = desatGroup.add("edittext", undefined, undefined, { name: "desatAmount" });
+	dialog.desatAmount.characters = 4;
+	// remove extra padding around the small numeric field
+	try { dialog.desatAmount.margins = [0, 0, 0, 0]; } catch(e) {}
+	var desatPctLabel = desatGroup.add("statictext", undefined, "%");
+	try { desatPctLabel.margins = [4, 0, 0, 0]; } catch(e) {}
+
 	if (desatParam !== undefined) {
 		dialog.desaturation.value = (desatParam.toLowerCase() === "true");
 	} else {
 		dialog.desaturation.value = desaturation;
 	}
+	if (desatAmountParam !== undefined) {
+		dialog.desatAmount.text = desatAmountParam;
+	} else {
+		dialog.desatAmount.text = desaturation_amount_setting.toString();
+	}
 
-	dialog.savestatus = dialog.add("checkbox", undefined, "Save and close when done");
+	dialog.savestatus = dialog.add("checkbox", undefined, "Save and Close When Done");
 	if (saveStatus !== undefined) {
 		dialog.savestatus.value = (saveStatus.toLowerCase() === "true");
 	} else {
@@ -125,6 +140,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, runmode) 
 		saveStatus = dialog.savestatus.value.toString();
 		autoAdjust = dialog.autoadjust.value.toString();
 		desaturation = dialog.desaturation.value.toString();
+		desaturation_amount_setting = parseInt(dialog.desatAmount.text) || desaturation_amount_setting;
 		dialog.close();
 	};
 	
@@ -145,7 +161,8 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, desatParam, runmode) 
 		"recipe": thisRecipe,
 		"savestatus": saveStatus,
 		"autoadjust": autoAdjust,
-		"desaturation": desaturation
+		"desaturation": desaturation,
+		"desatamount": desaturation_amount_setting
 	};
 }
 
@@ -166,6 +183,9 @@ function getRecipe() {
 				if (result.desaturation !== undefined && result.desaturation !== null) {
 					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
 				}
+				if (result.desatamount !== undefined && result.desatamount !== null) {
+					d.putInteger(stringIDToTypeID('desatamount'), result.desatamount);
+				}
 			app.playbackParameters = d;        
 			return result;
 		}
@@ -175,18 +195,21 @@ function getRecipe() {
 		var savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus'));
 		var autoadjust = null;
 		var desat = null;
+		var desatamount = null;
 		try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(e) { autoadjust = undefined; }
 		try { desat = app.playbackParameters.getString(stringIDToTypeID('desaturation')); } catch(e) { desat = undefined; }
+		try { desatamount = app.playbackParameters.getInteger(stringIDToTypeID('desatamount')); } catch(e) { desatamount = undefined; }
 		
 		if (app.playbackDisplayDialogs == DialogModes.ALL) {
 			// user run action in dialog mode (edit action step)
-				var result = displayDialog(recipe, savestatus, autoadjust, desat, "edit");
+				var result = displayDialog(recipe, savestatus, autoadjust, desat, desatamount, "edit");
 			if (!result.recipe || result.recipe == "") { isCancelled = true; return } else {
 				var d = new ActionDescriptor;
 				d.putString(stringIDToTypeID('recipe'), result.recipe);
 				d.putString(stringIDToTypeID('savestatus'), result.savestatus);
 					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
 					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
+					d.putInteger(stringIDToTypeID('desatamount'), result.desatamount);
 				app.playbackParameters = d;
 			}
 			executeScript = false;
@@ -198,7 +221,8 @@ function getRecipe() {
 				"recipe": recipe,
 				"savestatus": savestatus,
 				"autoadjust": autoadjust,
-				"desaturation": desat
+				"desaturation": desat,
+				"desatamount": desatamount
 			};
 		}
 	}
@@ -231,6 +255,10 @@ function processRecipe(runtimesettings) {
 			// Apply desaturation setting from dialog/playbackParameters if present
 			if (desatSetting !== undefined && desatSetting !== null) {
 				desaturation = (desatSetting.toLowerCase() === "true");
+			}
+			// Apply desaturation amount (percent) from dialog/playbackParameters if present
+			if (runtimesettings.desatamount !== undefined && runtimesettings.desatamount !== null) {
+				desaturation_amount_setting = parseInt(runtimesettings.desatamount) || desaturation_amount_setting;
 			}
 	} else {
 		executeScript = false;
@@ -410,7 +438,10 @@ function applyDesaturation(pre_r, pre_g, pre_b, strength) {
 		var coverage = computeMaskCoverage("Whole Mask");
 		var raw_desat = computeDesaturationAmount(pre_r, pre_g, pre_b, strength);
 		var multiplier = 1 + (1 - coverage) * desat_boost; // 1..1+desat_boost
-		var final_desat = Math.max(1, Math.min(30, Math.round(raw_desat * multiplier)));
+		// Normalize computed desaturation into 0.0..1.0 (reduce divisor to strengthen effect)
+		var normalized = Math.min(1.0, (raw_desat * multiplier) / 15.0);
+		// Scale by user percent (1..100) so amount=100 can yield full 100% opacity
+		var final_desat = Math.max(0, Math.min(100, Math.round(normalized * desaturation_amount_setting)));
 
 		var desatLayer = imagelayer.duplicate();
 		desatLayer.name = "Desaturation";
