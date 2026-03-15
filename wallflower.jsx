@@ -21,23 +21,57 @@ var save_whitepoint = true;
 var save_blackpoint = true;
 var desaturation = true;
 
+var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
+
 var desat_boost = 0.5; // how strongly to boost desaturation when mask coverage is small (0..1)
 var desaturation_amount_setting = 20; // user-editable amount (1..100) used as divisor
 
 var preflash_auto_samples = 5; // grid samples per axis (5x5)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
 
-// Preflash curve tuning (tweak these at the top of the script)
-// - `preflash_damp_max`: maximum overall damp applied to tones (0..1)
-// - `preflash_blackcomp_max`: max additional black-point pull (0..255)
-// - `preflash_mid_blend`: how strongly midtones favor the gentler damped() curve (0..1)
-// - `preflash_min_factor`: lowest allowed multiplier to avoid total crush (0..1)
+// Preflash curve tuning
+// - `preflash_damp_max` (0..1): overall exposure/contrast damping applied
+//   by the preflash. Think of this as global "fill" applied before tonal
+//   shaping — higher values increase the amount of darkening applied to
+//   shadows and midtones. Use lower values to preserve overall contrast.
+// - `preflash_blackcomp_max` (0..255): extra black-point pull applied near
+//   the toe of the curve. In photographic terms this controls shadow
+//   compression/crush — increase to deepen blacks and add vintage film-like
+//   shadow weight, reduce to keep shadow detail.
+// - `preflash_mid_blend` (0..1): blends between the aggressive compensation
+//   curve and a gentler damped curve for midtones. Values closer to 1
+//   preserve midtone separation (less midtone darkening); values near 0
+//   favor stronger shadow correction.
+// - `preflash_min_factor` (0..1): hard floor for the tone multiplier so the
+//   darkest tones never collapse to absolute black. Treat this as a safety
+//   net to prevent total crush when using aggressive preflash strengths.
 var preflash_damp_max = 0.6;
 var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
 
-// White and black point detection and remap settings
+// Black / white point detection and restoration (how to think in photo terms)
+// - `blackpoint_threshold_fraction`: fraction of image pixels used to decide
+//   where the true black point sits. Use a small value (e.g. 0.003) to find
+//   the darkest "real" pixels and ignore isolated noise or clipping. Increase
+//   this for very noisy or textured shadows so the detector ignores tiny
+//   specks.
+// - `blackpoint_tolerance`: minimum histogram-bin difference (in L bins)
+//   required before we attempt to restore the black point. Prevents tiny
+//   measurement noise from triggering a restore. ~2 is a good default.
+// - `blackpoint_restore_strength` (0..1): how much to move blacks back
+//   toward their original position after compensation — 0 leaves them alone,
+//   1 fully restores the original black point. Use intermediate values to
+//   soften the correction and avoid midtone side-effects.
+// - `whitepoint_threshold_fraction`: similar to black threshold but scans
+//   from the top of the histogram. Keep it tight (small) so specular highlights
+//   don't dominate the measurement; it helps recover highlight roll-off rather
+//   than specular clipping.
+// - `whitepoint_tolerance`: minimum bin gap to require before restoring
+//   highlights. Prevents unnecessary tiny shifts.
+// - `whitepoint_restore_strength` (0..1): fraction of the measured difference
+//   to restore. Use lower values when you want only subtle highlight recovery
+//   (avoid flattening the highlight shoulder).
 var blackpoint_threshold_fraction = 0.003;  // fraction of pixels to consider 'significant' (5%)
 var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this brighter than post-curve
 var blackpoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original black point
@@ -45,7 +79,10 @@ var whitepoint_threshold_fraction = 0.003; // tight (0.1%) - finds the actual to
 var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
 var whitepoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original white point
 
-var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode (varies by language; "L" is common)
+// Anchor tuning: fractions (0..1) controlling how strongly intermediate anchors pull
+// toward the original compensation mapping to protect midtones.
+var shadow_lift_fraction = 0.15; // how strongly the shadow-lift anchor moves toward `p32` (0..1)
+var highlight_lower_fraction = 0.15; // how strongly the highlight-lower anchor moves toward `p192` (0..1)
 
 var save = false;
 		
@@ -774,11 +811,12 @@ try {
 				if (needBlack) {
 					// Add main black anchor
 					restoreCurve.push([actualPostCurveBlack, restoredBp]);
-					// Add a gentle shadow-lift anchor a bit above the black anchor to smooth the slope
-					var shadowAnchorInput = 32;
-					if (shadowAnchorInput > actualPostCurveBlack) {
-						var shadowAnchorOutput = Math.round(p32 + (shadowAnchorInput - p32) * 0.15); // 15% toward original mid mapping (lighten)
-						restoreCurve.push([shadowAnchorInput, shadowAnchorOutput]);
+					// Pin at input 64 (identity) to prevent the cubic spline from dragging
+					// lower midtones down. Must be at least 8 steps above the black anchor
+					// to give the spline enough room to avoid overshoot/solarization.
+					var shadowAnchorInput = 64;
+					if (shadowAnchorInput > actualPostCurveBlack + 8) {
+						restoreCurve.push([shadowAnchorInput, shadowAnchorInput]);
 					}
 				}
 				restoreCurve.push([128, 128]);
@@ -787,7 +825,7 @@ try {
 					var highlightAnchorInput = 224;
 					if (highlightAnchorInput < actualPostCurveWhite) {
 						var p224 = comp(224);
-						var highlightAnchorOutput = Math.round(p224 + (p192 - p224) * 0.15); // 15% toward p192 (lower)
+						var highlightAnchorOutput = Math.round(p224 + (p192 - p224) * highlight_lower_fraction); // fraction toward p192 (lower)
 						restoreCurve.push([highlightAnchorInput, highlightAnchorOutput]);
 					}
 					restoreCurve.push([actualPostCurveWhite, restoredWp]);
