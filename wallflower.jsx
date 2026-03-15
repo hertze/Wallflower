@@ -57,24 +57,24 @@ var save = false;
 
 /*
 // BEGIN__HARVEST_EXCEPTION_ZSTRING
-<javascriptresource> 
-<name>Wallflower</name> 
+<javascriptresource>
+<name>Wallflower</name>
 <menu>automate</menu>
 <enableinfo>true</enableinfo>
 <eventid>f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4</eventid>
 <terminology><![CDATA[<< /Version 1
-					/Events <<
-					/f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4 [(Wallflower) <<
-					/recipe [(Recipe) /string]
-					/savestatus [(Save) /boolean]
-					/autoadjust [(AutoAdjust) /boolean]
-					/savewhitepoint [(SaveWhitePoint) /boolean]
-					/saveblackpoint [(SaveBlackPoint) /boolean]
-					/desaturation [(Desaturation) /boolean]
-					/desatamount [(DesatAmount) /integer]
-					>>
-						>>
-					>> ]]></terminology>
+	/Events <<
+	/f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4 [(Wallflower) <<
+	/recipe [(Recipe) /string]
+	/savestatus [(Save) /boolean]
+	/autoadjust [(AutoAdjust) /boolean]
+	/savewhitepoint [(SaveWhitePoint) /boolean]
+	/saveblackpoint [(SaveBlackPoint) /boolean]
+	/desaturation [(Desaturation) /boolean]
+	/desatamount [(DesatAmount) /integer]
+		>>]
+			>>
+	>> ]]></terminology>
 </javascriptresource>
 // END__HARVEST_EXCEPTION_ZSTRING
 */
