@@ -591,6 +591,22 @@ var isCancelled = false;
 var runtimesettings = getRecipe();
 if (runtimesettings.recipe != "none") { processRecipe(runtimesettings); }
 
+// Colors
+var preflashColor = new SolidColor();
+preflashColor.rgb.red = pre_flash_r;
+preflashColor.rgb.green = pre_flash_g;
+preflashColor.rgb.blue = pre_flash_b;
+
+var fogColor = new SolidColor();
+fogColor.rgb.red = 253;
+fogColor.rgb.green = 246;
+fogColor.rgb.blue = 227;
+
+var greyColor = new SolidColor();
+greyColor.rgb.red = 128;
+greyColor.rgb.green = 128;
+greyColor.rgb.blue = 128;
+
 try {	
 	if (executeScript == true) {
 
@@ -599,6 +615,11 @@ try {
 			var was16Bit = true;
 			doc.bitsPerChannel = BitsPerChannelType.SIXTEEN;
 		}
+
+		// Create luminance masks (pass scaled blur radius)
+		createLuminanceMasks(0,255, "Whole Mask", doc_scale * blur_radius);
+		createLuminanceMasks(0,64, "Shadow Mask", 0);
+		createLuminanceMasks(192,255, "Highlight Mask", 0);
 
 		// Check initial blackpoint
 		// Switch to Lab briefly so the measurement is on the L channel — consistent
@@ -611,27 +632,6 @@ try {
 				doc.changeMode(ChangeMode.RGB);
 			} catch (e) { initialBlackPoint = 0; }
 		}
-
-		// Create luminance masks (pass scaled blur radius)
-		createLuminanceMasks(0,255, "Whole Mask", doc_scale * blur_radius);
-		createLuminanceMasks(0,64, "Shadow Mask", 0);
-		createLuminanceMasks(192,255, "Highlight Mask", 0);
-
-		// Colors
-		var preflashColor = new SolidColor();
-		preflashColor.rgb.red = pre_flash_r;
-		preflashColor.rgb.green = pre_flash_g;
-		preflashColor.rgb.blue = pre_flash_b;
-
-		var fogColor = new SolidColor();
-		fogColor.rgb.red = 253;
-		fogColor.rgb.green = 246;
-		fogColor.rgb.blue = 227;
-		
-		var greyColor = new SolidColor();
-		greyColor.rgb.red = 128;
-		greyColor.rgb.green = 128;
-		greyColor.rgb.blue = 128;
 
 		// Preflash
 		if (auto_adjust_preflash) {
@@ -755,7 +755,7 @@ try {
 		doc.activeLayer = grainLayer;
 		doc.selection.selectAll();
 		doc.selection.fill(greyColor)
-		grainLayer.applyAddNoise(doc_scale*10, NoiseDistribution.GAUSSIAN, true);
+		grainLayer.applyAddNoise(doc_scale*5, NoiseDistribution.GAUSSIAN, true);
 		doc.selection.load(doc.channels.getByName("Whole Mask"));
 		doc.selection.invert();
 		doc.selection.clear();
