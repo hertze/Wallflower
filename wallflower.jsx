@@ -14,7 +14,7 @@
 var pre_flash_r = 217;
 var pre_flash_g = 217;
 var pre_flash_b = 217;
-var pre_flash_strength = 10;
+var pre_flash_strength = 20;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
 var save_whitepoint = true;
@@ -37,10 +37,13 @@ var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
 
-// Blackpoint detection and remap settings
-var blackpoint_threshold_fraction = 0.05;  // fraction of pixels to consider 'significant' (5%)
+// White and black point detection and remap settings
+var blackpoint_threshold_fraction = 0.003;  // fraction of pixels to consider 'significant' (5%)
 var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this brighter than post-curve
-var blackpoint_restore_strength = 0.5; // 0 = no restoration, 1 = full restoration back to original black point
+var blackpoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original black point
+var whitepoint_threshold_fraction = 0.003; // tight (0.1%) — finds the actual top-end occupied bin, not clipped specular
+var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
+var whitepoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original white point
 
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode (varies by language; "L" is common)
 
@@ -117,7 +120,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 
 	// Save original blackpoint checkbox (placed after auto-adjust)
 	// This controls whether we detect & bake the original blackpoint.
-	dialog.saveblack = dialog.add("checkbox", undefined, "Keep Original Blackpoint");
+	dialog.saveblack = dialog.add("checkbox", undefined, "Keep Original Black Point");
 	if (saveBlackParam !== undefined) {
 		dialog.saveblack.value = (saveBlackParam.toLowerCase() === "true");
 	} else {
@@ -512,6 +515,36 @@ function computeImageBlackPoint(thresholdFraction) {
 	}
 }
 
+// Compute the last 'significant' white histogram bin (0..255) scanning from the top.
+// Use a tight thresholdFraction (e.g. 0.001) so specular-clipped bins don't dominate.
+function computeImageWhitePoint(thresholdFraction) {
+	try {
+		var d = app.activeDocument;
+		var totalPixels = d.width.as("px") * d.height.as("px");
+		var threshold = Math.max(0, Math.min(1, (thresholdFraction !== undefined) ? thresholdFraction : whitepoint_threshold_fraction));
+		var cumulative = 0;
+		if (d.mode === DocumentMode.LAB) {
+			var lHist = d.channels.getByName(lightness_channel_name).histogram;
+			for (var i = 255; i >= 0; i--) {
+				cumulative += (lHist[i] || 0);
+				if (totalPixels && (cumulative / totalPixels) >= threshold) return i;
+			}
+		} else {
+			var rHist = d.channels[0].histogram;
+			var gHist = d.channels[1].histogram;
+			var bHist = d.channels[2].histogram;
+			for (var i = 255; i >= 0; i--) {
+				var avg = ((rHist[i] || 0) + (gHist[i] || 0) + (bHist[i] || 0)) / 3.0;
+				cumulative += avg;
+				if (totalPixels && (cumulative / totalPixels) >= threshold) return i;
+			}
+		}
+		return 0;
+	} catch (e) {
+		return 0;
+	}
+}
+
 // Apply desaturation using the Whole Mask: duplicates layer, desaturates, masks and merges
 function applyDesaturation(pre_r, pre_g, pre_b, strength) {
 	try {
@@ -643,14 +676,16 @@ try {
 		createLuminanceMasks(0,64, "Shadow Mask", 0);
 		createLuminanceMasks(192,255, "Highlight Mask", 0);
 
-		// Check initial blackpoint in Lab before preflash modifies the image.
+		// Check initial black/white points in Lab before preflash modifies the image.
 		var initialBlackPoint = 0;
-		if (save_blackpoint) {
+		var initialWhitePoint = 255;
+		if (save_blackpoint || save_whitepoint) {
 			try {
 				doc.changeMode(ChangeMode.LAB);
-				initialBlackPoint = computeImageBlackPoint();
+				if (save_blackpoint) initialBlackPoint = computeImageBlackPoint();
+				if (save_whitepoint) initialWhitePoint = computeImageWhitePoint(whitepoint_threshold_fraction);
 				doc.changeMode(ChangeMode.RGB);
-			} catch (e) { initialBlackPoint = 0; }
+			} catch (e) { initialBlackPoint = 0; initialWhitePoint = 255; }
 		}
 
 		// Preflash
@@ -693,12 +728,7 @@ try {
 			var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
 			var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
 			var p192 = comp(192);
-			// p255: when save_whitepoint=true, continue the p128→p192 slope linearly so highlights
-			// are gently darkened in proportion to the compensation already applied below p192.
-			// When false, comp(255) = 255 — highlights left completely untouched by the curve.
-			var p255 = save_whitepoint
-				? clamp255(p192 + ((p192 - p128) / (192 - 128)) * (255 - 192))
-				: comp(255);
+			var p255 = comp(255); // always 255 — highlights untouched by compensation curve; white point restored in Step 3
 			// Step 1: preflash compensation curve — pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
@@ -714,23 +744,39 @@ try {
 			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 			imagelayer.adjustCurves(curvePoints);
 
-			// Step 2 (independent): restore original black point if requested.
-			// The curve anchors midtones at [128,128] always, so only the shadow end moves.
+			// Step 2: restore black and/or white point in a single curve pass.
+			var needBlack = false, needWhite = false;
+			var actualPostCurveBlack, bp, restoredBp;
+			var actualPostCurveWhite, wp, restoredWp;
+
+			doc.activeChannels = savedChannels;
+
 			if (save_blackpoint) {
-				// Restore full channel access before reading histogram — restricted activeChannels
-				// causes getByName/histogram to fail and the catch returns a bogus value.
-				doc.activeChannels = savedChannels;
-				var actualPostCurveBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
-				var bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
-				// Preflash adds light → post-curve black moves right (higher bin) than original.
-				// Restore only when the black point shifted brighter by more than the tolerance.
+				actualPostCurveBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
+				bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
 				if (actualPostCurveBlack > bp + blackpoint_tolerance) {
-					doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
-					var restoredBp = Math.round(actualPostCurveBlack - (actualPostCurveBlack - bp) * blackpoint_restore_strength);
-					var lCurve = [[0, 0], [actualPostCurveBlack, restoredBp], [128, 128], [255, 255]];
-					imagelayer.adjustCurves(lCurve);
-					doc.activeChannels = savedChannels;
+					restoredBp = Math.round(actualPostCurveBlack - (actualPostCurveBlack - bp) * blackpoint_restore_strength);
+					needBlack = true;
 				}
+			}
+			if (save_whitepoint) {
+				actualPostCurveWhite = Math.max(0, Math.min(255, Math.round(computeImageWhitePoint(whitepoint_threshold_fraction))));
+				wp = Math.max(0, Math.min(255, Math.round(initialWhitePoint || 255)));
+				if (actualPostCurveWhite < wp - whitepoint_tolerance) {
+					restoredWp = Math.round(actualPostCurveWhite + (wp - actualPostCurveWhite) * whitepoint_restore_strength);
+					needWhite = true;
+				}
+			}
+
+			if (needBlack || needWhite) {
+				doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+				var restoreCurve = [[0, 0]];
+				if (needBlack) restoreCurve.push([actualPostCurveBlack, restoredBp]);
+				restoreCurve.push([128, 128]);
+				if (needWhite) restoreCurve.push([actualPostCurveWhite, restoredWp]);
+				restoreCurve.push([255, 255]);
+				imagelayer.adjustCurves(restoreCurve);
+				doc.activeChannels = savedChannels;
 			}
 			doc.changeMode(ChangeMode.RGB);
 		}
