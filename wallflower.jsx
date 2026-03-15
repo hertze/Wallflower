@@ -771,7 +771,16 @@ try {
 			if (needBlack || needWhite) {
 				doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 				var restoreCurve = [[0, 0]];
-				if (needBlack) restoreCurve.push([actualPostCurveBlack, restoredBp]);
+				if (needBlack) {
+					// Add main black anchor
+					restoreCurve.push([actualPostCurveBlack, restoredBp]);
+					// Add a gentle shadow-lift anchor a bit above the black anchor to smooth the slope
+					var shadowAnchorInput = 32;
+					if (shadowAnchorInput > actualPostCurveBlack) {
+						var shadowAnchorOutput = Math.round(p32 + (shadowAnchorInput - p32) * 0.15); // 25% toward original mid mapping (lighten)
+						restoreCurve.push([shadowAnchorInput, shadowAnchorOutput]);
+					}
+				}
 				restoreCurve.push([128, 128]);
 				if (needWhite) restoreCurve.push([actualPostCurveWhite, restoredWp]);
 				restoreCurve.push([255, 255]);
