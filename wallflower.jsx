@@ -41,7 +41,7 @@ var preflash_min_factor = 0.35;
 var blackpoint_threshold_fraction = 0.003;  // fraction of pixels to consider 'significant' (5%)
 var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this brighter than post-curve
 var blackpoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original black point
-var whitepoint_threshold_fraction = 0.003; // tight (0.1%) — finds the actual top-end occupied bin, not clipped specular
+var whitepoint_threshold_fraction = 0.003; // tight (0.1%) - finds the actual top-end occupied bin, not clipped specular
 var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
 var whitepoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original white point
 
@@ -728,8 +728,8 @@ try {
 			var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
 			var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
 			var p192 = comp(192);
-			var p255 = comp(255); // always 255 — highlights untouched by compensation curve; white point restored in Step 3
-			// Step 1: preflash compensation curve — pure tone correction, no blackpoint logic.
+			var p255 = comp(255); // always 255 - highlights untouched by compensation curve; white point restored in Step 3
+			// Step 1: preflash compensation curve - pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
 				[32, p32],
@@ -738,7 +738,7 @@ try {
 				[192, p192],
 				[255, p255]
 			];
-			// Apply in Lab/Lightness only — colour-neutral, no hue/saturation shift.
+			// Apply in Lab/Lightness only - colour-neutral, no hue/saturation shift.
 			doc.changeMode(ChangeMode.LAB);
 			var savedChannels = doc.activeChannels;
 			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
