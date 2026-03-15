@@ -29,22 +29,25 @@ var desaturation_amount_setting = 20; // user-editable amount (1..100) used as d
 var preflash_auto_samples = 5; // grid samples per axis (5x5)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
 
-// Preflash curve tuning
+// Preflash tuning
 // - `preflash_damp_max` (0..1): overall exposure/contrast damping applied
 //   by the preflash. Think of this as global "fill" applied before tonal
 //   shaping — higher values increase the amount of darkening applied to
 //   shadows and midtones. Use lower values to preserve overall contrast.
 // - `preflash_blackcomp_max` (0..255): extra black-point pull applied near
-//   the toe of the curve. In photographic terms this controls shadow
-//   compression/crush — increase to deepen blacks and add vintage film-like
-//   shadow weight, reduce to keep shadow detail.
-// - `preflash_mid_blend` (0..1): blends between the aggressive compensation
-//   curve and a gentler damped curve for midtones. Values closer to 1
-//   preserve midtone separation (less midtone darkening); values near 0
-//   favor stronger shadow correction.
+//   the toe of the mapping. This controls shadow compression/crush —
+//   increase to deepen blacks, reduce to keep shadow detail.
+// - `preflash_mid_blend` (0..1): blends the aggressive compensation result
+//   with a gentler damped mapping for midtones. Values closer to 1
+//   preserve midtone separation; values near 0 favor stronger shadow
+//   correction.
 // - `preflash_min_factor` (0..1): hard floor for the tone multiplier so the
-//   darkest tones never collapse to absolute black. Treat this as a safety
-//   net to prevent total crush when using aggressive preflash strengths.
+//   darkest tones never collapse to absolute black. Acts as a safety net
+//   when using aggressive preflash strengths.
+//
+// Note: black/white "restore" after compensation now uses a Levels-based
+// mapping (not additional curve anchors). See the restoration settings
+// below for detection and strength controls.
 var preflash_damp_max = 0.6;
 var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
@@ -78,11 +81,6 @@ var blackpoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restorati
 var whitepoint_threshold_fraction = 0.003; // tight (0.1%) - finds the actual top-end occupied bin, not clipped specular
 var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
 var whitepoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original white point
-
-// Anchor tuning: fractions (0..1) controlling how strongly intermediate anchors pull
-// toward the original compensation mapping to protect midtones.
-var shadow_lift_fraction = 0.15; // how strongly the shadow-lift anchor moves toward `p32` (0..1)
-var highlight_lower_fraction = 0.15; // how strongly the highlight-lower anchor moves toward `p192` (0..1)
 
 var save = false;
 		
@@ -148,7 +146,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	}
 
 	// Keep White Point checkbox
-	dialog.savewhite = dialog.add("checkbox", undefined, "Keep Original White Point");
+	dialog.savewhite = dialog.add("checkbox", undefined, "Preserve White Point");
 	if (saveWhiteParam !== undefined) {
 		dialog.savewhite.value = (saveWhiteParam.toLowerCase() === "true");
 	} else {
@@ -157,7 +155,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 
 	// Save original blackpoint checkbox (placed after auto-adjust)
 	// This controls whether we detect & bake the original blackpoint.
-	dialog.saveblack = dialog.add("checkbox", undefined, "Keep Original Black Point");
+	dialog.saveblack = dialog.add("checkbox", undefined, "Preserve Black Point");
 	if (saveBlackParam !== undefined) {
 		dialog.saveblack.value = (saveBlackParam.toLowerCase() === "true");
 	} else {
@@ -778,60 +776,70 @@ try {
 			// Apply in Lab/Lightness only - colour-neutral, no hue/saturation shift.
 			doc.changeMode(ChangeMode.LAB);
 			var savedChannels = doc.activeChannels;
-			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+				doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+
 			imagelayer.adjustCurves(curvePoints);
 
 			// Step 2: restore black and/or white point in a single curve pass.
 			var needBlack = false, needWhite = false;
-			var actualPostCurveBlack, bp, restoredBp;
-			var actualPostCurveWhite, wp, restoredWp;
+			var actualPostLevelBlack, bp, restoredBp;
+			var actualPostLevelWhite, wp, restoredWp;
 
 			doc.activeChannels = savedChannels;
 
 			if (save_blackpoint) {
-				actualPostCurveBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
+				actualPostLevelBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
 				bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
-				if (actualPostCurveBlack > bp + blackpoint_tolerance) {
-					restoredBp = Math.round(actualPostCurveBlack - (actualPostCurveBlack - bp) * blackpoint_restore_strength);
+				if (actualPostLevelBlack > bp + blackpoint_tolerance) {
+					restoredBp = Math.round(actualPostLevelBlack - (actualPostLevelBlack - bp) * blackpoint_restore_strength);
 					needBlack = true;
 				}
 			}
 			if (save_whitepoint) {
-				actualPostCurveWhite = Math.max(0, Math.min(255, Math.round(computeImageWhitePoint(whitepoint_threshold_fraction))));
+				actualPostLevelWhite = Math.max(0, Math.min(255, Math.round(computeImageWhitePoint(whitepoint_threshold_fraction))));
 				wp = Math.max(0, Math.min(255, Math.round(initialWhitePoint || 255)));
-				if (actualPostCurveWhite < wp - whitepoint_tolerance) {
-					restoredWp = Math.round(actualPostCurveWhite + (wp - actualPostCurveWhite) * whitepoint_restore_strength);
+				if (actualPostLevelWhite < wp - whitepoint_tolerance) {
+					restoredWp = Math.round(actualPostLevelWhite + (wp - actualPostLevelWhite) * whitepoint_restore_strength);
 					needWhite = true;
 				}
 			}
 
 			if (needBlack || needWhite) {
 				doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
-				var restoreCurve = [[0, 0]];
-				if (needBlack) {
-					// Add main black anchor
-					restoreCurve.push([actualPostCurveBlack, restoredBp]);
-					// Pin at input 64 (identity) to prevent the cubic spline from dragging
-					// lower midtones down. Must be at least 8 steps above the black anchor
-					// to give the spline enough room to avoid overshoot/solarization.
-					var shadowAnchorInput = 64;
-					if (shadowAnchorInput > actualPostCurveBlack + 8) {
-						restoreCurve.push([shadowAnchorInput, shadowAnchorInput]);
+
+					// Use Levels instead of curves for robust black/white restoration
+					// Levels parameters: inputShadow, inputGamma, inputHighlight, outputShadow, outputHighlight
+					try {
+						// Prepare Levels parameters depending on which endpoints we need to restore
+						var inBlack = needBlack ? actualPostLevelBlack : 0;
+						var inWhite = needWhite ? actualPostLevelWhite : 255;
+						var outBlack = needBlack ? restoredBp : 0;
+						var outWhite = needWhite ? restoredWp : 255;
+						// Choose the mid input value to preserve: use post-compensation mid (p128)
+						var midIn = p128;
+						var gamma = 1.0;
+						// Only compute gamma when inputs are distinct and mid lies inside the input range
+						if (inWhite > inBlack) {
+							var t = (midIn - inBlack) / (inWhite - inBlack);
+							// desired normalized output for mid should equal midIn mapped into output range
+							var tprime = (midIn - outBlack) / (outWhite - outBlack);
+							// numeric safety
+							if (t > 0 && t < 1 && tprime > 0 && tprime < 1) {
+								// solve tprime = t^(1/gamma)  =>  gamma = ln(t) / ln(tprime)
+								try {
+									gamma = Math.log(t) / Math.log(tprime);
+									// clamp gamma to reasonable photographic bounds
+									if (!isFinite(gamma) || gamma <= 0) gamma = 1.0;
+									gamma = Math.max(0.25, Math.min(4.0, gamma));
+								} catch (e) { gamma = 1.0; }
+							}
+						}
+						// Apply a single Levels pass mapping the measured endpoints to the restored endpoints
+						imagelayer.adjustLevels(inBlack, inWhite, gamma, outBlack, outWhite);
+					} catch (e) {
+						// fall back silently if adjustLevels is unsupported in this context
 					}
-				}
-				restoreCurve.push([128, 128]);
-				if (needWhite) {
-					// Add a gentle highlight-lower anchor a bit below the white anchor to smooth the slope
-					var highlightAnchorInput = 224;
-					if (highlightAnchorInput < actualPostCurveWhite) {
-						var p224 = comp(224);
-						var highlightAnchorOutput = Math.round(p224 + (p192 - p224) * highlight_lower_fraction); // fraction toward p192 (lower)
-						restoreCurve.push([highlightAnchorInput, highlightAnchorOutput]);
-					}
-					restoreCurve.push([actualPostCurveWhite, restoredWp]);
-				}
-				restoreCurve.push([255, 255]);
-				imagelayer.adjustCurves(restoreCurve);
+
 				doc.activeChannels = savedChannels;
 			}
 			doc.changeMode(ChangeMode.RGB);
