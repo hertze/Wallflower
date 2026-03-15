@@ -13,7 +13,7 @@
 
 var pre_flash_r = 255;
 var pre_flash_g = 105;
-var pre_flash_b = 40;
+var pre_flash_b = 20;
 var pre_flash_strength = 10;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
@@ -460,21 +460,28 @@ function computeMaskCoverage(channelName) {
 
 // Compute the first 'significant' black histogram bin (0..255) where
 // cumulative pixel count exceeds `thresholdFraction` of the image.
+// Works in both RGB mode (averages R/G/B channels) and Lab mode (uses L channel only).
 function computeImageBlackPoint(thresholdFraction) {
 	try {
 		var d = app.activeDocument;
 		var totalPixels = d.width.as("px") * d.height.as("px");
-		var rHist = d.channels[0].histogram;
-		var gHist = d.channels[1].histogram;
-		var bHist = d.channels[2].histogram;
-
 		var threshold = Math.max(0, Math.min(1, (thresholdFraction !== undefined) ? thresholdFraction : blackpoint_threshold_fraction));
 		var cumulative = 0;
-		for (var i = 0; i <= 255; i++) {
-			var avg = ((rHist[i] || 0) + (gHist[i] || 0) + (bHist[i] || 0)) / 3.0;
-			cumulative += avg;
-			if (totalPixels && (cumulative / totalPixels) >= threshold) {
-				return i;
+		if (d.mode === DocumentColorMode.LAB) {
+			// In Lab mode read the Lightness channel by name
+			var lHist = d.channels.getByName(lightness_channel_name).histogram;
+			for (var i = 0; i <= 255; i++) {
+				cumulative += (lHist[i] || 0);
+				if (totalPixels && (cumulative / totalPixels) >= threshold) return i;
+			}
+		} else {
+			var rHist = d.channels[0].histogram;
+			var gHist = d.channels[1].histogram;
+			var bHist = d.channels[2].histogram;
+			for (var i = 0; i <= 255; i++) {
+				var avg = ((rHist[i] || 0) + (gHist[i] || 0) + (bHist[i] || 0)) / 3.0;
+				cumulative += avg;
+				if (totalPixels && (cumulative / totalPixels) >= threshold) return i;
 			}
 		}
 		return 255;
@@ -594,11 +601,14 @@ try {
 		}
 
 		// Check initial blackpoint
-		// Analyze initial black point (first significant dark bin)
+		// Switch to Lab briefly so the measurement is on the L channel — consistent
+		// with how the post-curve black point will be measured later.
 		var initialBlackPoint = 0;
 		if (save_blackpoint) {
 			try {
-				initialBlackPoint = computeImageBlackPoint(); // use default threshold (configurable)
+				doc.changeMode(ChangeMode.LAB);
+				initialBlackPoint = computeImageBlackPoint(); // reads L channel in Lab mode
+				doc.changeMode(ChangeMode.RGB);
 			} catch (e) { initialBlackPoint = 0; }
 		}
 
@@ -679,27 +689,29 @@ try {
 				[192, p192],
 				[255, p255]
 			]);
-			// Apply the preflash compensation curve.
+			// Apply the preflash compensation curve in Lab mode on the Lightness
+			// channel only — keeps the adjustment colour-neutral and avoids any
+			// hue/saturation shift from darkening the RGB channels directly.
+			doc.changeMode(ChangeMode.LAB);
+			var savedChannels = doc.activeChannels;
+			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 			imagelayer.adjustCurves(curvePoints);
-			// Restore the original black point: measure the actual post-curve
-			// result and apply a 3-point corrective curves pass only if needed.
+			// Restore the original black point while still in Lab/Lightness context,
+			// avoiding a redundant mode round-trip.
 			// (Simulation was abandoned because Photoshop's spline interpolation
 			// differs from linear prediction, causing unreliable results.)
 			if (save_blackpoint) {
-					var actualPostCurveBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
-					var bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
-					if (actualPostCurveBlack > bp + blackpoint_tolerance) {
-						doc.changeMode(ChangeMode.LAB);
-						var savedChannels = doc.activeChannels;
-						doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
-						var lCurve = [[0, 0], [actualPostCurveBlack, bp]];
-						if (actualPostCurveBlack < 128) lCurve.push([128, 128]);
-						lCurve.push([255, 255]);
-						imagelayer.adjustCurves(lCurve);
-						doc.activeChannels = savedChannels;
-						doc.changeMode(ChangeMode.RGB);
-					}
+				var actualPostCurveBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
+				var bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
+				if (actualPostCurveBlack > bp + blackpoint_tolerance) {
+					var lCurve = [[0, 0], [actualPostCurveBlack, bp]];
+					if (actualPostCurveBlack < 128) lCurve.push([128, 128]);
+					lCurve.push([255, 255]);
+					imagelayer.adjustCurves(lCurve);
+				}
 			}
+			doc.activeChannels = savedChannels;
+			doc.changeMode(ChangeMode.RGB);
 		}
 
 		// Lower micro contrast
