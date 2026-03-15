@@ -17,7 +17,8 @@ var pre_flash_b = 217;
 var pre_flash_strength = 10;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
-var save_blackpoint = false;
+var save_whitepoint = true;
+var save_blackpoint = true;
 var desaturation = true;
 
 var desat_boost = 0.5; // how strongly to boost desaturation when mask coverage is small (0..1)
@@ -37,7 +38,7 @@ var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
 
 // Blackpoint detection and remap settings
-var blackpoint_threshold_fraction = 0.05; // fraction of pixels to consider 'significant' (default 0.2%)
+var blackpoint_threshold_fraction = 0.05;  // fraction of pixels to consider 'significant' (5%)
 var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this brighter than post-curve
 var blackpoint_restore_strength = 0.5; // 0 = no restoration, 1 = full restoration back to original black point
 
@@ -64,6 +65,7 @@ var save = false;
 					/recipe [(Recipe) /string]
 					/savestatus [(Save) /boolean]
 					/autoadjust [(AutoAdjust) /boolean]
+					/savewhitepoint [(SaveWhitePoint) /boolean]
 					/saveblackpoint [(SaveBlackPoint) /boolean]
 					/desaturation [(Desaturation) /boolean]
 					/desatamount [(DesatAmount) /integer]
@@ -75,7 +77,7 @@ var save = false;
 */
 
 
-function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, desatParam, desatAmountParam, runmode) {
+function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveWhiteParam, desatParam, desatAmountParam, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
 	dialog.text = "Wallflower";
@@ -105,9 +107,17 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, desat
 		dialog.autoadjust.value = auto_adjust_preflash;
 	}
 
+	// Keep White Point checkbox
+	dialog.savewhite = dialog.add("checkbox", undefined, "Keep Original White Point");
+	if (saveWhiteParam !== undefined) {
+		dialog.savewhite.value = (saveWhiteParam.toLowerCase() === "true");
+	} else {
+		dialog.savewhite.value = save_whitepoint;
+	}
+
 	// Save original blackpoint checkbox (placed after auto-adjust)
 	// This controls whether we detect & bake the original blackpoint.
-	dialog.saveblack = dialog.add("checkbox", undefined, "Keep original blackpoint");
+	dialog.saveblack = dialog.add("checkbox", undefined, "Keep Original Blackpoint");
 	if (saveBlackParam !== undefined) {
 		dialog.saveblack.value = (saveBlackParam.toLowerCase() === "true");
 	} else {
@@ -152,6 +162,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, desat
 		saveStatus = dialog.savestatus.value.toString();
 		autoAdjust = dialog.autoadjust.value.toString();
 		desaturation = dialog.desaturation.value.toString();
+		save_whitepoint = dialog.savewhite.value.toString();
 		save_blackpoint = dialog.saveblack.value.toString();
 		desaturation_amount_setting = parseInt(dialog.desatAmount.text) || desaturation_amount_setting;
 		dialog.close();
@@ -174,6 +185,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, desat
 		"recipe": thisRecipe,
 		"savestatus": saveStatus,
 		"autoadjust": autoAdjust,
+		"savewhitepoint": save_whitepoint,
 		"saveblackpoint": save_blackpoint,
 		"desaturation": desaturation,
 		"desatamount": desaturation_amount_setting
@@ -194,6 +206,9 @@ function getRecipe() {
 				if (result.autoadjust !== undefined && result.autoadjust !== null) {
 					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
 				}
+				if (result.savewhitepoint !== undefined && result.savewhitepoint !== null) {
+					d.putString(stringIDToTypeID('savewhitepoint'), result.savewhitepoint);
+				}
 				if (result.saveblackpoint !== undefined && result.saveblackpoint !== null) {
 					d.putString(stringIDToTypeID('saveblackpoint'), result.saveblackpoint);
 				}
@@ -212,21 +227,24 @@ function getRecipe() {
 		var savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus'));
 		var autoadjust = null;
 		var saveblack = null;
+		var savewhite = null;
 		var desat = null;
 		var desatamount = null;
 		try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(e) { autoadjust = undefined; }
 		try { saveblack = app.playbackParameters.getString(stringIDToTypeID('saveblackpoint')); } catch(e) { saveblack = undefined; }
+		try { savewhite = app.playbackParameters.getString(stringIDToTypeID('savewhitepoint')); } catch(e) { savewhite = undefined; }
 		try { desat = app.playbackParameters.getString(stringIDToTypeID('desaturation')); } catch(e) { desat = undefined; }
 		try { desatamount = app.playbackParameters.getInteger(stringIDToTypeID('desatamount')); } catch(e) { desatamount = undefined; }
 		
 		if (app.playbackDisplayDialogs == DialogModes.ALL) {
 			// user run action in dialog mode (edit action step)
-				var result = displayDialog(recipe, savestatus, autoadjust, saveblack, desat, desatamount, "edit");
+				var result = displayDialog(recipe, savestatus, autoadjust, saveblack, savewhite, desat, desatamount, "edit");
 			if (!result.recipe || result.recipe == "") { isCancelled = true; return } else {
 				var d = new ActionDescriptor;
 				d.putString(stringIDToTypeID('recipe'), result.recipe);
 				d.putString(stringIDToTypeID('savestatus'), result.savestatus);
 					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
+					d.putString(stringIDToTypeID('savewhitepoint'), result.savewhitepoint);
 					d.putString(stringIDToTypeID('saveblackpoint'), result.saveblackpoint);
 					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
 					d.putInteger(stringIDToTypeID('desatamount'), result.desatamount);
@@ -241,6 +259,7 @@ function getRecipe() {
 				"recipe": recipe,
 				"savestatus": savestatus,
 				"autoadjust": autoadjust,
+				"savewhitepoint": savewhite,
 				"saveblackpoint": saveblack,
 				"desaturation": desat,
 				"desatamount": desatamount
@@ -256,6 +275,10 @@ function processRecipe(runtimesettings) {
 	var autoAdjustSetting = runtimesettings.autoadjust;
 	var desatSetting = runtimesettings.desaturation;
 	save = (saveStatus.toLowerCase() === "true");
+		// Apply save_whitepoint setting from dialog/playbackParameters if present
+		if (runtimesettings.savewhitepoint !== undefined && runtimesettings.savewhitepoint !== null) {
+			save_whitepoint = (runtimesettings.savewhitepoint.toLowerCase() === "true");
+		}
 		// Apply save_blackpoint setting from dialog/playbackParameters if present
 		if (runtimesettings.saveblackpoint !== undefined && runtimesettings.saveblackpoint !== null) {
 			save_blackpoint = (runtimesettings.saveblackpoint.toLowerCase() === "true");
@@ -620,14 +643,12 @@ try {
 		createLuminanceMasks(0,64, "Shadow Mask", 0);
 		createLuminanceMasks(192,255, "Highlight Mask", 0);
 
-		// Check initial blackpoint
-		// Switch to Lab briefly so the measurement is on the L channel — consistent
-		// with how the post-curve black point will be measured later.
+		// Check initial blackpoint in Lab before preflash modifies the image.
 		var initialBlackPoint = 0;
 		if (save_blackpoint) {
 			try {
 				doc.changeMode(ChangeMode.LAB);
-				initialBlackPoint = computeImageBlackPoint(); // reads L channel in Lab mode
+				initialBlackPoint = computeImageBlackPoint();
 				doc.changeMode(ChangeMode.RGB);
 			} catch (e) { initialBlackPoint = 0; }
 		}
@@ -672,9 +693,12 @@ try {
 			var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
 			var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
 			var p192 = comp(192);
-			// p255: continue the p128→p192 slope linearly to 255 — no mode-translation assumptions.
-			var slope192 = (p192 - p128) / (192 - 128);
-			var p255 = clamp255(p192 + slope192 * (255 - 192));
+			// p255: when save_whitepoint=true, continue the p128→p192 slope linearly so highlights
+			// are gently darkened in proportion to the compensation already applied below p192.
+			// When false, comp(255) = 255 — highlights left completely untouched by the curve.
+			var p255 = save_whitepoint
+				? clamp255(p192 + ((p192 - p128) / (192 - 128)) * (255 - 192))
+				: comp(255);
 			// Step 1: preflash compensation curve — pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
