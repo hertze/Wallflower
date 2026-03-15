@@ -17,7 +17,7 @@ var pre_flash_b = 217;
 var pre_flash_strength = 10;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
-var save_blackpoint = true;
+var save_blackpoint = false;
 var desaturation = true;
 
 var desat_boost = 0.5; // how strongly to boost desaturation when mask coverage is small (0..1)
@@ -672,7 +672,9 @@ try {
 			var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
 			var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
 			var p192 = comp(192);
-			var p255 = comp(255);
+			// p255: continue the p128→p192 slope linearly to 255 — no mode-translation assumptions.
+			var slope192 = (p192 - p128) / (192 - 128);
+			var p255 = clamp255(p192 + slope192 * (255 - 192));
 			// Step 1: preflash compensation curve — pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
