@@ -11,9 +11,9 @@
 
 // Default settings ------------------------------------------------------------
 
-var pre_flash_r = 255;
-var pre_flash_g = 105;
-var pre_flash_b = 20;
+var pre_flash_r = 217;
+var pre_flash_g = 217;
+var pre_flash_b = 217;
 var pre_flash_strength = 10;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
@@ -31,16 +31,15 @@ var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
 // - `preflash_blackcomp_max`: max additional black-point pull (0..255)
 // - `preflash_mid_blend`: how strongly midtones favor the gentler damped() curve (0..1)
 // - `preflash_min_factor`: lowest allowed multiplier to avoid total crush (0..1)
-// - `preflash_blackshift_max`: max input threshold that will be forced to black (0..255)
 var preflash_damp_max = 0.6;
 var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
-var preflash_blackshift_max = 12;
 
 // Blackpoint detection and remap settings
 var blackpoint_threshold_fraction = 0.05; // fraction of pixels to consider 'significant' (default 0.2%)
-var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this darker than post-curve
+var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this brighter than post-curve
+var blackpoint_restore_strength = 0.5; // 0 = no restoration, 1 = full restoration back to original black point
 
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode (varies by language; "L" is common)
 
@@ -467,7 +466,7 @@ function computeImageBlackPoint(thresholdFraction) {
 		var totalPixels = d.width.as("px") * d.height.as("px");
 		var threshold = Math.max(0, Math.min(1, (thresholdFraction !== undefined) ? thresholdFraction : blackpoint_threshold_fraction));
 		var cumulative = 0;
-		if (d.mode === DocumentColorMode.LAB) {
+		if (d.mode === DocumentMode.LAB) {
 			// In Lab mode read the Lightness channel by name
 			var lHist = d.channels.getByName(lightness_channel_name).histogram;
 			for (var i = 0; i <= 255; i++) {
@@ -486,7 +485,7 @@ function computeImageBlackPoint(thresholdFraction) {
 		}
 		return 255;
 	} catch (e) {
-		return 0;
+		return 255;
 	}
 }
 
@@ -674,43 +673,39 @@ try {
 			var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
 			var p192 = comp(192);
 			var p255 = comp(255);
-			// Optionally force a small input range to map to 0 to restore true blacks
-			var blackShiftInput = Math.round((pre_flash_strength / 100) * preflash_blackshift_max); // 0..preflash_blackshift_max
-			var curvePoints = [];
-			curvePoints.push([0, p0]);
-			if (blackShiftInput > 0) {
-				// Map the small input threshold down to 0 to recover blackpoint
-				curvePoints.push([blackShiftInput, 0]);
-			}
-			curvePoints = curvePoints.concat([
+			// Step 1: preflash compensation curve — pure tone correction, no blackpoint logic.
+			var curvePoints = [
+				[0, p0],
 				[32, p32],
 				[64, p64],
 				[128, p128],
 				[192, p192],
 				[255, p255]
-			]);
-			// Apply the preflash compensation curve in Lab mode on the Lightness
-			// channel only — keeps the adjustment colour-neutral and avoids any
-			// hue/saturation shift from darkening the RGB channels directly.
+			];
+			// Apply in Lab/Lightness only — colour-neutral, no hue/saturation shift.
 			doc.changeMode(ChangeMode.LAB);
 			var savedChannels = doc.activeChannels;
 			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 			imagelayer.adjustCurves(curvePoints);
-			// Restore the original black point while still in Lab/Lightness context,
-			// avoiding a redundant mode round-trip.
-			// (Simulation was abandoned because Photoshop's spline interpolation
-			// differs from linear prediction, causing unreliable results.)
+
+			// Step 2 (independent): restore original black point if requested.
+			// The curve anchors midtones at [128,128] always, so only the shadow end moves.
 			if (save_blackpoint) {
+				// Restore full channel access before reading histogram — restricted activeChannels
+				// causes getByName/histogram to fail and the catch returns a bogus value.
+				doc.activeChannels = savedChannels;
 				var actualPostCurveBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
 				var bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
+				// Preflash adds light → post-curve black moves right (higher bin) than original.
+				// Restore only when the black point shifted brighter by more than the tolerance.
 				if (actualPostCurveBlack > bp + blackpoint_tolerance) {
-					var lCurve = [[0, 0], [actualPostCurveBlack, bp]];
-					if (actualPostCurveBlack < 128) lCurve.push([128, 128]);
-					lCurve.push([255, 255]);
+					doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+					var restoredBp = Math.round(actualPostCurveBlack - (actualPostCurveBlack - bp) * blackpoint_restore_strength);
+					var lCurve = [[0, 0], [actualPostCurveBlack, restoredBp], [128, 128], [255, 255]];
 					imagelayer.adjustCurves(lCurve);
+					doc.activeChannels = savedChannels;
 				}
 			}
-			doc.activeChannels = savedChannels;
 			doc.changeMode(ChangeMode.RGB);
 		}
 
