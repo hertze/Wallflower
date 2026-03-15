@@ -777,12 +777,21 @@ try {
 					// Add a gentle shadow-lift anchor a bit above the black anchor to smooth the slope
 					var shadowAnchorInput = 32;
 					if (shadowAnchorInput > actualPostCurveBlack) {
-						var shadowAnchorOutput = Math.round(p32 + (shadowAnchorInput - p32) * 0.15); // 25% toward original mid mapping (lighten)
+						var shadowAnchorOutput = Math.round(p32 + (shadowAnchorInput - p32) * 0.15); // 15% toward original mid mapping (lighten)
 						restoreCurve.push([shadowAnchorInput, shadowAnchorOutput]);
 					}
 				}
 				restoreCurve.push([128, 128]);
-				if (needWhite) restoreCurve.push([actualPostCurveWhite, restoredWp]);
+				if (needWhite) {
+					// Add a gentle highlight-lower anchor a bit below the white anchor to smooth the slope
+					var highlightAnchorInput = 224;
+					if (highlightAnchorInput < actualPostCurveWhite) {
+						var p224 = comp(224);
+						var highlightAnchorOutput = Math.round(p224 + (p192 - p224) * 0.15); // 15% toward p192 (lower)
+						restoreCurve.push([highlightAnchorInput, highlightAnchorOutput]);
+					}
+					restoreCurve.push([actualPostCurveWhite, restoredWp]);
+				}
 				restoreCurve.push([255, 255]);
 				imagelayer.adjustCurves(restoreCurve);
 				doc.activeChannels = savedChannels;
