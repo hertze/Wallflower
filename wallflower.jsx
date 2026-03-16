@@ -14,12 +14,12 @@
 var pre_flash_r = 182;
 var pre_flash_g = 96;
 var pre_flash_b = 44;
-var pre_flash_strength = 100;
+var pre_flash_strength = 20;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
-var preserve_whitepoint = false;
+var preserve_whitepoint = true;
 var whitepoint_restore_strength = 20; // 1–100: percentage to restore the original white point
-var preserve_blackpoint = false;
+var preserve_blackpoint = true;
 var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var desaturation = false;
 
@@ -62,7 +62,7 @@ var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
 var preflash_lift_max = 62; // max Lightness lift in upper tones at strength=100
-var preflash_black_lift_max = 32; // max blackpoint lift at strength=100
+var preflash_black_lift_max = 40; // max blackpoint lift at strength=100
 var preflash_comp_midtone_max = 26; // max midtone pullback after lift
 var preflash_comp_highlight_max = 38; // max highlight pullback after lift
 
@@ -238,8 +238,8 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 		saveStatus = dialog.savestatus.value.toString();
 		autoAdjust = dialog.autoadjust.value.toString();
 		desaturation = dialog.desaturation.value.toString();
-		preserve_whitepoint = dialog.savewhite.value.toString();
-		preserve_blackpoint = dialog.saveblack.value.toString();
+		preserve_whitepoint = dialog.savewhite.value;
+		preserve_blackpoint = dialog.saveblack.value;
 		var _ds = parseInt(dialog.desatAmount.text); if (!isNaN(_ds)) desaturation_amount_setting = _ds;
 		var _bp = parseInt(dialog.blackRestoreAmount.text); if (!isNaN(_bp)) blackpoint_restore_strength = _bp;
 		var _wp = parseInt(dialog.whiteRestoreAmount.text); if (!isNaN(_wp)) whitepoint_restore_strength = _wp;
@@ -746,6 +746,9 @@ function softenImage(layer, radius) {
 }
 
 function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, paperResponseCoverage) {
+	preserve_blackpoint = (preserve_blackpoint === true || preserve_blackpoint === "true");
+	preserve_whitepoint = (preserve_whitepoint === true || preserve_whitepoint === "true");
+
 	if (auto_adjust_preflash) {
 		pre_flash_strength = autoAdjustPreflashStrength(pre_flash_strength);
 	}
@@ -759,14 +762,20 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 	// Step 1: single paper-shaped Lightness curve in Lab (toe, straight-line, shoulder).
 	var strengthNorm = pre_flash_strength / 100;
 	function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
+	// Chroma can increase perceived contrast, so add a mild Lightness lift compensation.
+	var chromaScaleMax = 1.35;
+	var chromaScale = chromaScaleMax * strengthNorm;
+	var chromaLumaComp = 1 + 0.12 * (chromaScale / chromaScaleMax);
+	var chromaHighlightRollback = 12 * (chromaScale / chromaScaleMax) * (0.9 + 0.1 * paperResponseCoverage);
 
-	var liftAmt = preflash_lift_max * strengthNorm * (0.9 + 0.25 * wholeMaskCoverage);
-	var blackLiftNorm = Math.pow(strengthNorm, 1.05);
+	var liftAmt = preflash_lift_max * strengthNorm * (0.9 + 0.25 * wholeMaskCoverage) * chromaLumaComp;
+	// Stronger toe response across the whole strength range.
+	var blackLiftNorm = Math.pow(strengthNorm, 0.82);
 	var blackLiftFactor = preserve_blackpoint ? (1 - (blackpoint_restore_strength / 100)) : 1;
 	var blackLiftAmt = preflash_black_lift_max * blackLiftNorm * (0.85 + 0.15 * wholeMaskCoverage) * blackLiftFactor;
 	var compMid = preflash_comp_midtone_max * strengthNorm * (0.8 + 0.2 * wholeMaskCoverage);
 	var whiteCompFactor = preserve_whitepoint ? (1 - (whitepoint_restore_strength / 100)) : 1;
-	var compHigh = preflash_comp_highlight_max * strengthNorm * (0.85 + 0.15 * paperResponseCoverage) * whiteCompFactor;
+	var compHigh = preflash_comp_highlight_max * strengthNorm * (0.95 + 0.25 * paperResponseCoverage) * whiteCompFactor;
 	var crushNorm = Math.max(0, Math.min(1, (strengthNorm - 0.58) / 0.42));
 	var crushAmt = 34 * crushNorm * crushNorm * (0.85 + 0.15 * paperResponseCoverage);
 
@@ -775,13 +784,15 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 		var toe = Math.pow(1 - t, 2.2);
 		var mid = 4 * t * (1 - t);
 		var shoulder = Math.pow(t, 2.4);
+		var highlightProtect = 1 - 0.65 * shoulder;
 		var y = v;
 		// Lift through the straight-line region, add matte toe lift,
 		// then compress mids/highlights and high-strength toe.
-		y += liftAmt * (0.18 + 0.95 * Math.pow(t, 0.9));
+		y += liftAmt * (0.16 + 0.82 * Math.pow(t, 0.85)) * highlightProtect;
 		y += blackLiftAmt * toe * 1.1;
 		y -= compMid * mid * 0.95;
-		y -= compHigh * shoulder * 1.05;
+		y -= compHigh * shoulder * 1.22;
+		y -= chromaHighlightRollback * shoulder * shoulder;
 		y -= crushAmt * Math.pow(1 - t, 1.8) * 0.8;
 		return clamp255(y);
 	}
@@ -803,6 +814,8 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 	p192 = Math.max(p160, p192);
 	p224 = Math.max(p192, p224);
 	p255 = Math.max(p224, p255);
+
+	// Endpoint mapping is handled in a separate final curve pass below.
 
 	// Apply the Lightness curve only inside the Whole Mask.
 	var curvePoints = [
@@ -842,8 +855,6 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 	doc.activeLayer = chromaLayer;
 
 	// Strong, linear chroma ramp for predictable behavior.
-	var chromaScaleMax = 1.35;
-	var chromaScale = chromaScaleMax * strengthNorm;
 	var targetA = preflashColor.lab.a;
 	var targetB = preflashColor.lab.b;
 	var deltaA = Math.round(targetA * chromaScale);
@@ -930,6 +941,23 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 			// fall back silently if adjustLevels is unsupported in this context
 		}
 
+		doc.activeChannels = savedChannels;
+	}
+
+	// Separate global endpoint curve pass.
+	// At strength=100 and preserve disabled: black->10, white->250.
+	if (!preserve_blackpoint || !preserve_whitepoint) {
+		var targetBlack = preserve_blackpoint ? 0 : clamp255(Math.round(10 * strengthNorm));
+		var targetWhite = preserve_whitepoint ? 255 : clamp255(255 - Math.round(5 * strengthNorm));
+		if (targetWhite <= targetBlack) targetWhite = Math.min(255, targetBlack + 1);
+		doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+		try {
+			imagelayer.adjustCurves([
+				[0, targetBlack],
+				[128, 128],
+				[255, targetWhite]
+			]);
+		} catch (e) {}
 		doc.activeChannels = savedChannels;
 	}
 
