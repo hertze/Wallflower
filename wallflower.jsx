@@ -17,7 +17,7 @@ var pre_flash_b = 86;
 var pre_flash_strength = 20;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
-var preserve_whitepoint = false;
+var preserve_whitepoint = true;
 var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
 var preserve_blackpoint = true;
 var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
@@ -637,6 +637,32 @@ function computeImageWhitePoint(thresholdFraction) {
 	}
 }
 
+function computeAverageLightness() {
+	try {
+		var d = app.activeDocument;
+		var totalPixels = d.width.as("px") * d.height.as("px");
+		var sum = 0;
+		var i;
+		if (d.mode === DocumentMode.LAB) {
+			var lHist = d.channels.getByName(lightness_channel_name).histogram;
+			for (i = 0; i <= 255; i++) {
+				sum += (lHist[i] || 0) * i;
+			}
+		} else {
+			var rHist = d.channels[0].histogram;
+			var gHist = d.channels[1].histogram;
+			var bHist = d.channels[2].histogram;
+			for (i = 0; i <= 255; i++) {
+				var avg = ((rHist[i] || 0) + (gHist[i] || 0) + (bHist[i] || 0)) / 3.0;
+				sum += avg * i;
+			}
+		}
+		return totalPixels ? (sum / totalPixels) : 128;
+	} catch (e) {
+		return 128;
+	}
+}
+
 // Apply desaturation using the Whole Mask: duplicates layer, desaturates, masks and merges
 function applyDesaturation(pre_r, pre_g, pre_b, strength) {
 	try {
@@ -771,14 +797,14 @@ try {
 		// Check initial black/white points in Lab before preflash modifies the image.
 		var initialBlackPoint = 0;
 		var initialWhitePoint = 255;
-		if (preserve_blackpoint || preserve_whitepoint) {
-			try {
-				doc.changeMode(ChangeMode.LAB);
-				if (preserve_blackpoint) initialBlackPoint = computeImageBlackPoint();
-				if (preserve_whitepoint) initialWhitePoint = computeImageWhitePoint(whitepoint_threshold_fraction);
-				doc.changeMode(ChangeMode.RGB);
-			} catch (e) { initialBlackPoint = 0; initialWhitePoint = 255; }
-		}
+		var initialMeanLightness = 128;
+		try {
+			doc.changeMode(ChangeMode.LAB);
+			initialMeanLightness = computeAverageLightness();
+			if (preserve_blackpoint) initialBlackPoint = computeImageBlackPoint();
+			if (preserve_whitepoint) initialWhitePoint = computeImageWhitePoint(whitepoint_threshold_fraction);
+			doc.changeMode(ChangeMode.RGB);
+		} catch (e) { initialBlackPoint = 0; initialWhitePoint = 255; initialMeanLightness = 128; }
 
 		// Preflash
 		if (auto_adjust_preflash) {
@@ -787,7 +813,7 @@ try {
 		if (pre_flash_strength > 0) {
 			var preflashLayer = doc.artLayers.add();
 			preflashLayer.name = "Preflash";
-			preflashLayer.blendMode = BlendMode.LINEARDODGE;
+			preflashLayer.blendMode = BlendMode.SCREEN;
 			preflashLayer.opacity = pre_flash_strength;
 			
 			doc.selection.load(doc.channels.getByName("Whole Mask"));
@@ -795,32 +821,39 @@ try {
 			doc.selection.deselect();
 			preflashLayer.merge();
 
-			// Smart preflash compensation: darken more in shadows (including black point), less in highlights.
-			var damp = Math.min(preflash_damp_max, (pre_flash_strength / 100) * preflash_damp_max); // overall strength
-			var blackComp = Math.round((pre_flash_strength / 100) * preflash_blackcomp_max); // max extra shadow pull
+			doc.changeMode(ChangeMode.LAB);
+			var savedChannels = doc.activeChannels;
+			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+
+			// Normalize compensation by the actual Lightness lift caused by the preflash
+			// so perceived brightness stays steadier across different preflash strengths.
+			var meanLift = Math.max(0, computeAverageLightness() - initialMeanLightness);
+			var damp = Math.min(preflash_damp_max, (pre_flash_strength / 100) * preflash_damp_max);
+			var baseComp = Math.round(meanLift * (1.15 + damp * 0.35));
+			var highlightComp = Math.round(meanLift * (0.45 + (1 - preflash_mid_blend) * 0.55));
 			function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
 			function damped(v) {
 				var t = v / 255.0; // 0..1
-				// Use t^2 so highlights (t~1) are barely affected, shadows (t~0) affected more
-				var factor = 1 - damp * (1 - t * t);
-				factor = Math.max(preflash_min_factor, factor); // avoid total crush
-				return clamp255(v * factor);
+				// Subtract a measured midtone offset while protecting the toe.
+				var toeProtect = Math.pow(1 - t, 1.6);
+				var extra = baseComp * (1 - 0.78 * toeProtect);
+				return clamp255(v - extra);
 			}
 			function comp(v) {
-				// additional black-point compensation that tapers toward highlights
+				// Add extra rollback near the shoulder so highlights do not keep gaining brightness.
 				var base = damped(v);
 				var t = v / 255.0;
-				var extra = Math.round(blackComp * Math.pow(1 - t, 3)); // cubic falloff: much stronger near 0, minimal in midtones
+				var extra = Math.round(highlightComp * Math.pow(t, 2.4));
 				return clamp255(base - extra);
 			}
-			// Blend midtones back toward the gentler damped() result so midtones are less affected
+			// Blend lower mids back toward the gentler damped() result so the toe stays open.
 			var midBlend = preflash_mid_blend; // 0..1 where 1 = fully damped (less change), 0 = fully comp (more change)
 			var p0 = comp(0);
 			var p32 = comp(32);
 			var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
 			var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
 			var p192 = comp(192);
-			var p255 = comp(255); // always 255 - highlights untouched by compensation curve; white point restored in Step 3
+			var p255 = 255; // keep the endpoint fixed; highlight shape is handled below this anchor
 			// Step 1: preflash compensation curve - pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
@@ -831,9 +864,6 @@ try {
 				[255, p255]
 			];
 			// Apply in Lab/Lightness only - colour-neutral, no hue/saturation shift.
-			doc.changeMode(ChangeMode.LAB);
-			var savedChannels = doc.activeChannels;
-				doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 
 			imagelayer.adjustCurves(curvePoints);
 
