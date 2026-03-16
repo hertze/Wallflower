@@ -14,12 +14,12 @@
 var pre_flash_r = 132;
 var pre_flash_g = 104;
 var pre_flash_b = 86;
-var pre_flash_strength = 20;
+var pre_flash_strength = 10;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
-var preserve_whitepoint = true;
+var preserve_whitepoint = false;
 var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
-var preserve_blackpoint = true;
+var preserve_blackpoint = false;
 var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var desaturation = true;
 
@@ -35,8 +35,8 @@ var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
 
 var highlight_mask_gamma = 1.0; // gamma to bias highlight mask when building (lower = more midtone coverage)
 var whole_mask_gamma = 1.0; // gamma to bias whole mask when building (lower = more midtone coverage)
-var paper_response_mask_gamma = 0.75; // stronger toe weighting for print-response smoothing
-var paper_response_mask_range_end = 176; // extend into lower mids but keep upper mids/highlights cleaner
+var paper_response_mask_gamma = 0.65; // stronger toe weighting for print-response smoothing
+var paper_response_mask_range_end = 192; // extend into lower mids but keep upper mids/highlights cleaner
 
 // Preflash tuning
 // - `preflash_damp_max` (0..1): overall exposure/contrast damping applied
@@ -798,18 +798,18 @@ try {
 		createLuminanceMasks(0, 255, whole_mask_gamma, "Whole Mask", doc_scale * blur_radius);
 		createLuminanceMasks(0, paper_response_mask_range_end, paper_response_mask_gamma, "Paper Response Mask", doc_scale * blur_radius);
 		createLuminanceMasks(192, 255, highlight_mask_gamma, "Highlight Mask", 0);
+		var wholeMaskCoverage = computeMaskCoverage("Whole Mask");
+		var paperResponseCoverage = computeMaskCoverage("Paper Response Mask");
 
 		// Check initial black/white points in Lab before preflash modifies the image.
 		var initialBlackPoint = 0;
 		var initialWhitePoint = 255;
-		var initialMeanLightness = 128;
 		try {
 			doc.changeMode(ChangeMode.LAB);
-			initialMeanLightness = computeAverageLightness();
 			if (preserve_blackpoint) initialBlackPoint = computeImageBlackPoint();
 			if (preserve_whitepoint) initialWhitePoint = computeImageWhitePoint(whitepoint_threshold_fraction);
 			doc.changeMode(ChangeMode.RGB);
-		} catch (e) { initialBlackPoint = 0; initialWhitePoint = 255; initialMeanLightness = 128; }
+		} catch (e) { initialBlackPoint = 0; initialWhitePoint = 255; }
 
 		// Preflash
 		if (auto_adjust_preflash) {
@@ -830,33 +830,33 @@ try {
 			var savedChannels = doc.activeChannels;
 			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 
-			// Normalize compensation by the actual Lightness lift caused by the preflash
-			// so perceived brightness stays steadier across different preflash strengths.
-			var meanLift = Math.max(0, computeAverageLightness() - initialMeanLightness);
-			var damp = Math.min(preflash_damp_max, (pre_flash_strength / 100) * preflash_damp_max);
-			var baseComp = Math.round(meanLift * (1.15 + damp * 0.35));
-			var highlightComp = Math.round(meanLift * (0.45 + (1 - preflash_mid_blend) * 0.55));
+			// Model compensation as a toe/shoulder response driven by exposure strength
+			// and the precomputed mask coverage rather than global mean brightness.
+			var strengthNorm = pre_flash_strength / 100;
+			var damp = Math.min(preflash_damp_max, strengthNorm * preflash_damp_max);
+			var midComp = Math.round((24 + 40 * paperResponseCoverage) * strengthNorm * (0.8 + damp * 0.65));
+			var shoulderComp = Math.round((14 + 30 * wholeMaskCoverage) * strengthNorm * (0.8 + (1 - preflash_mid_blend) * 0.4));
 			function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
-			function damped(v) {
+			function gentle(v) {
 				var t = v / 255.0; // 0..1
-				// Subtract a measured midtone offset while protecting the toe.
-				var toeProtect = Math.pow(1 - t, 1.6);
-				var extra = baseComp * (1 - 0.78 * toeProtect);
+				var toeProtect = Math.pow(1 - t, 2.0);
+				var midWeight = 4 * t * (1 - t);
+				var extra = midComp * (0.7 * midWeight + 0.35 * t) * (1 - 0.84 * toeProtect);
 				return clamp255(v - extra);
 			}
 			function comp(v) {
-				// Add extra rollback near the shoulder so highlights do not keep gaining brightness.
-				var base = damped(v);
+				// Add extra rollback in the shoulder so highlight contrast does not build up.
+				var base = gentle(v);
 				var t = v / 255.0;
-				var extra = Math.round(highlightComp * Math.pow(t, 2.4));
+				var extra = Math.round(shoulderComp * Math.pow(t, 2.0));
 				return clamp255(base - extra);
 			}
 			// Blend lower mids back toward the gentler damped() result so the toe stays open.
 			var midBlend = preflash_mid_blend; // 0..1 where 1 = fully damped (less change), 0 = fully comp (more change)
 			var p0 = comp(0);
 			var p32 = comp(32);
-			var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
-			var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
+			var p64 = Math.round(comp(64) * (1 - midBlend) + gentle(64) * midBlend);
+			var p128 = Math.round(comp(128) * (1 - midBlend) + gentle(128) * midBlend);
 			var p192 = comp(192);
 			// Lower the 255 anchor by the same amount as p192 so highlight contrast does not increase.
 			var p255 = Math.max(p192, Math.min(255, p192 + (255 - 192)));
@@ -986,7 +986,7 @@ try {
 		doc.selection.fill(greyColor)
 		grainLayer.applyAddNoise(doc_scale*8, NoiseDistribution.GAUSSIAN, true);
 		grainLayer.applyGaussianBlur(doc_scale * 0.3);
-		doc.selection.load(doc.channels.getByName("Whole Mask"));
+		doc.selection.load(doc.channels.getByName("Paper Response Mask"));
 		doc.selection.invert();
 		doc.selection.clear();
 		doc.selection.deselect();
