@@ -11,17 +11,17 @@
 
 // Default settings ------------------------------------------------------------
 
-var pre_flash_r = 132;
-var pre_flash_g = 104;
-var pre_flash_b = 86;
-var pre_flash_strength = 30;
+var pre_flash_r = 182;
+var pre_flash_g = 96;
+var pre_flash_b = 44;
+var pre_flash_strength = 50;
 var blur_radius = 3;
-var auto_adjust_preflash = true;
+var auto_adjust_preflash = false;
 var preserve_whitepoint = false;
 var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
 var preserve_blackpoint = false;
 var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
-var desaturation = true;
+var desaturation = false;
 
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
 
@@ -61,8 +61,10 @@ var preflash_damp_max = 0.6;
 var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
-var preflash_lift_max = 48; // max Lightness lift in upper tones at strength=100
-var preflash_black_lift_max = 18; // max blackpoint lift at strength=100
+var preflash_lift_max = 62; // max Lightness lift in upper tones at strength=100
+var preflash_black_lift_max = 32; // max blackpoint lift at strength=100
+var preflash_comp_midtone_max = 26; // max midtone pullback after lift
+var preflash_comp_highlight_max = 38; // max highlight pullback after lift
 
 // Black / white point detection and restoration (how to think in photo terms)
 // - `blackpoint_threshold_fraction`: fraction of image pixels used to decide
@@ -757,33 +759,34 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 	// Step 1: pure masked Lightness lift in Lab (no compensatory darkening curve).
 	var strengthNorm = pre_flash_strength / 100;
 	function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
-	var liftAmt = Math.round(preflash_lift_max * strengthNorm * (0.75 + 0.25 * wholeMaskCoverage));
+	var liftAmt = Math.round(preflash_lift_max * strengthNorm * (0.9 + 0.25 * wholeMaskCoverage));
 
 	var p0 = 0;
-	var p32 = clamp255(32 + Math.round(liftAmt * 0.20));
-	var p64 = clamp255(64 + Math.round(liftAmt * 0.40));
-	var p128 = clamp255(128 + Math.round(liftAmt * 0.70));
-	var p160 = clamp255(160 + Math.round(liftAmt * 0.88));
-	var p192 = clamp255(192 + Math.round(liftAmt * 1.00));
-	var p224 = clamp255(224 + Math.round(liftAmt * 1.05));
+	var p32 = clamp255(32 + Math.round(liftAmt * 0.32));
+	var p64 = clamp255(64 + Math.round(liftAmt * 0.62));
+	var p128 = clamp255(128 + Math.round(liftAmt * 0.92));
+	var p160 = clamp255(160 + Math.round(liftAmt * 1.05));
+	var p192 = clamp255(192 + Math.round(liftAmt * 1.12));
+	var p224 = clamp255(224 + Math.round(liftAmt * 1.20));
 	var p255 = 255;
 
 	// Reproduce the old SCREEN-like print behavior at higher strengths by
 	// compressing the toe (deeper blacks / less shadow separation).
 	// The crush ramps in only for larger strengths.
-	var crushNorm = Math.max(0, Math.min(1, (strengthNorm - 0.45) / 0.55));
-	var crushAmt = Math.round(44 * crushNorm * crushNorm * (0.85 + 0.15 * paperResponseCoverage));
-	p32 = clamp255(p32 - Math.round(crushAmt * 0.95));
-	p64 = clamp255(p64 - Math.round(crushAmt * 0.70));
-	p128 = clamp255(p128 - Math.round(crushAmt * 0.25));
+	var crushNorm = Math.max(0, Math.min(1, (strengthNorm - 0.58) / 0.42));
+	var crushAmt = Math.round(34 * crushNorm * crushNorm * (0.85 + 0.15 * paperResponseCoverage));
+	p32 = clamp255(p32 - Math.round(crushAmt * 0.78));
+	p64 = clamp255(p64 - Math.round(crushAmt * 0.55));
+	p128 = clamp255(p128 - Math.round(crushAmt * 0.18));
 
 	// Lift blackpoint with increasing preflash strength so stronger preflash
 	// raises the toe while still allowing print-like compression behavior.
-	var blackLiftNorm = Math.pow(strengthNorm, 1.25);
+	var blackLiftNorm = Math.pow(strengthNorm, 1.05);
 	var blackLiftAmt = Math.round(preflash_black_lift_max * blackLiftNorm * (0.85 + 0.15 * wholeMaskCoverage));
-	p0 = clamp255(p0 + Math.round(blackLiftAmt * 1.00));
-	p32 = clamp255(p32 + Math.round(blackLiftAmt * 0.90));
-	p64 = clamp255(p64 + Math.round(blackLiftAmt * 0.55));
+	p0 = clamp255(p0 + Math.round(blackLiftAmt * 1.25));
+	p32 = clamp255(p32 + Math.round(blackLiftAmt * 1.05));
+	p64 = clamp255(p64 + Math.round(blackLiftAmt * 0.75));
+	p128 = clamp255(p128 + Math.round(blackLiftAmt * 0.35));
 
 	// Keep anchors monotonic.
 	p32 = Math.max(p0, p32);
@@ -817,12 +820,90 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 	lightnessLayer.merge();
 	imagelayer = doc.activeLayer;
 
+	// Step 1b: compensatory Lightness curve to keep overall brightness closer
+	// to original by pulling back mids/highlights after the lift pass.
+	var compNorm = Math.pow(strengthNorm, 1.0);
+	var compMid = Math.round(preflash_comp_midtone_max * compNorm * (0.8 + 0.2 * wholeMaskCoverage));
+	var compHigh = Math.round(preflash_comp_highlight_max * compNorm * (0.85 + 0.15 * paperResponseCoverage));
+	var c0 = 0;
+	var c32 = 32;
+	var c64 = clamp255(64 - Math.round(compMid * 0.25));
+	var c128 = clamp255(128 - Math.round(compMid * 1.00));
+	var c160 = clamp255(160 - Math.round(compMid * 1.15));
+	var c192 = clamp255(192 - Math.round(compHigh * 0.80));
+	var c224 = clamp255(224 - Math.round(compHigh * 1.05));
+	var c255 = clamp255(255 - Math.round(compHigh * 1.10));
+	c32 = Math.max(c0, c32);
+	c64 = Math.max(c32, c64);
+	c128 = Math.max(c64, c128);
+	c160 = Math.max(c128, c160);
+	c192 = Math.max(c160, c192);
+	c224 = Math.max(c192, c224);
+	c255 = Math.max(c224, c255);
+	var compCurve = [
+		[0, c0],
+		[32, c32],
+		[64, c64],
+		[128, c128],
+		[160, c160],
+		[192, c192],
+		[224, c224],
+		[255, c255]
+	];
+	var compLayer = imagelayer.duplicate();
+	compLayer.name = "Preflash Compensate";
+	doc.activeLayer = compLayer;
+	doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+	compLayer.adjustCurves(compCurve);
+	doc.activeChannels = savedChannels;
+	compLayer.merge();
+	imagelayer = doc.activeLayer;
+
 	// Step 2: restore black and/or white point in a single curve pass.
 	var needBlack = false, needWhite = false;
 	var actualPostLevelBlack, bp, restoredBp;
 	var actualPostLevelWhite, wp, restoredWp;
 
 	doc.activeChannels = savedChannels;
+
+		// Step 3: add chroma in Lab safely by shifting a/b channels (relative move from current values).
+	// This avoids hue inversion from absolute fills and keeps tonal work isolated in Lightness.
+	var chromaLayer = imagelayer.duplicate();
+	chromaLayer.name = "Preflash Chroma";
+	doc.activeLayer = chromaLayer;
+
+	var chromaScale = 0.52; // stronger chroma contribution in Lab a/b
+	var targetA = preflashColor.lab.a;
+	var targetB = preflashColor.lab.b;
+	var deltaA = Math.round(targetA * strengthNorm * chromaScale);
+	var deltaB = Math.round(targetB * strengthNorm * chromaScale);
+
+	function shiftedCurve(delta) {
+		return [
+			[0, clamp255(0 + delta)],
+			[128, clamp255(128 + delta)],
+			[255, clamp255(255 + delta)]
+		];
+	}
+
+	var originalLabChannels = doc.activeChannels;
+	doc.selection.load(doc.channels.getByName("Whole Mask"));
+	doc.selection.invert();
+
+	// Shift a channel
+	doc.activeChannels = [doc.channels.getByName("a")];
+	chromaLayer.adjustCurves(shiftedCurve(deltaA));
+
+	// Shift b channel
+	doc.activeChannels = [doc.channels.getByName("b")];
+	chromaLayer.adjustCurves(shiftedCurve(deltaB));
+
+	// Keep chroma change inside Whole Mask
+	doc.activeChannels = originalLabChannels;
+	doc.selection.clear();
+	doc.selection.deselect();
+	chromaLayer.merge();
+	imagelayer = doc.activeLayer;
 
 	if (preserve_blackpoint) {
 		actualPostLevelBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
@@ -879,45 +960,6 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 
 		doc.activeChannels = savedChannels;
 	}
-
-	// Step 3: add chroma in Lab safely by shifting a/b channels (relative move from current values).
-	// This avoids hue inversion from absolute fills and keeps tonal work isolated in Lightness.
-	var chromaLayer = imagelayer.duplicate();
-	chromaLayer.name = "Preflash Chroma";
-	doc.activeLayer = chromaLayer;
-
-	var chromaScale = 0.28; // lower by design: a/b shifts are very sensitive
-	var targetA = preflashColor.lab.a;
-	var targetB = preflashColor.lab.b;
-	var deltaA = Math.round(targetA * strengthNorm * chromaScale);
-	var deltaB = Math.round(targetB * strengthNorm * chromaScale);
-
-	function shiftedCurve(delta) {
-		return [
-			[0, clamp255(0 + delta)],
-			[128, clamp255(128 + delta)],
-			[255, clamp255(255 + delta)]
-		];
-	}
-
-	var originalLabChannels = doc.activeChannels;
-	doc.selection.load(doc.channels.getByName("Whole Mask"));
-	doc.selection.invert();
-
-	// Shift a channel
-	doc.activeChannels = [doc.channels.getByName("a")];
-	chromaLayer.adjustCurves(shiftedCurve(deltaA));
-
-	// Shift b channel
-	doc.activeChannels = [doc.channels.getByName("b")];
-	chromaLayer.adjustCurves(shiftedCurve(deltaB));
-
-	// Keep chroma change inside Whole Mask
-	doc.activeChannels = originalLabChannels;
-	doc.selection.clear();
-	doc.selection.deselect();
-	chromaLayer.merge();
-	imagelayer = doc.activeLayer;
 
 	// Convert back to RGB for the remaining pipeline stages.
 	doc.changeMode(ChangeMode.RGB);
