@@ -28,11 +28,15 @@ var lightness_channel_name = "Lightness"; // name of the lightness channel in La
 var desat_boost = 0.5; // how strongly to boost desaturation when mask coverage is small (0..1)
 var desaturation_amount_setting = 20; // user-editable amount (1..100) used as divisor
 
+var microSmooth_strength = 50; // opacity percentage for the micro-smoothing layer (0..100)
+
 var preflash_auto_samples = 5; // grid samples per axis (5x5)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
 
 var highlight_mask_gamma = 1.0; // gamma to bias highlight mask when building (lower = more midtone coverage)
 var whole_mask_gamma = 1.0; // gamma to bias whole mask when building (lower = more midtone coverage)
+var paper_response_mask_gamma = 0.75; // stronger toe weighting for print-response smoothing
+var paper_response_mask_range_end = 176; // extend into lower mids but keep upper mids/highlights cleaner
 
 // Preflash tuning
 // - `preflash_damp_max` (0..1): overall exposure/contrast damping applied
@@ -790,8 +794,9 @@ try {
 		}
 
 		// Create luminance masks (pass scaled blur radius)
-		// Pass an explicit gamma (third argument) for Whole and Highlight masks to bias midtones when needed
+		// Pass an explicit gamma (third argument) for each mask to bias midtones when needed
 		createLuminanceMasks(0, 255, whole_mask_gamma, "Whole Mask", doc_scale * blur_radius);
+		createLuminanceMasks(0, paper_response_mask_range_end, paper_response_mask_gamma, "Paper Response Mask", doc_scale * blur_radius);
 		createLuminanceMasks(192, 255, highlight_mask_gamma, "Highlight Mask", 0);
 
 		// Check initial black/white points in Lab before preflash modifies the image.
@@ -853,7 +858,8 @@ try {
 			var p64 = Math.round(comp(64) * (1 - midBlend) + damped(64) * midBlend);
 			var p128 = Math.round(comp(128) * (1 - midBlend) + damped(128) * midBlend);
 			var p192 = comp(192);
-			var p255 = 255; // keep the endpoint fixed; highlight shape is handled below this anchor
+			// Lower the 255 anchor by the same amount as p192 so highlight contrast does not increase.
+			var p255 = Math.max(p192, Math.min(255, p192 + (255 - 192)));
 			// Step 1: preflash compensation curve - pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
@@ -936,9 +942,14 @@ try {
 		var microContratLayer = imagelayer.duplicate();
 		microContratLayer.name = "Micro Contrast";
 		microContratLayer.blendMode = BlendMode.LUMINOSITY;
-		microContratLayer.opacity = 30;
+		microContratLayer.opacity = microSmooth_strength;
 
 		microContratLayer.applyGaussianBlur(doc_scale * 0.8);
+		doc.activeLayer = microContratLayer;
+		doc.selection.load(doc.channels.getByName("Paper Response Mask"));
+		doc.selection.invert();
+		doc.selection.clear();
+		doc.selection.deselect();
 		microContratLayer.merge();
 
 		// Soften image
@@ -993,6 +1004,13 @@ try {
 			var wholeMask = doc.channels.getByName("Whole Mask");
 			if (wholeMask) {
 				wholeMask.remove();
+			}
+		} catch (e) {}
+		
+		try {
+			var paperResponseMask = doc.channels.getByName("Paper Response Mask");
+			if (paperResponseMask) {
+				paperResponseMask.remove();
 			}
 		} catch (e) {}
 		
