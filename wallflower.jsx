@@ -17,9 +17,9 @@ var pre_flash_b = 44;
 var pre_flash_strength = 20;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
-var preserve_whitepoint = true;
+var preserve_whitepoint = false;
 var whitepoint_restore_strength = 20; // 1–100: percentage to restore the original white point
-var preserve_blackpoint = true;
+var preserve_blackpoint = false;
 var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var desaturation = false;
 
@@ -61,7 +61,7 @@ var preflash_damp_max = 0.6;
 var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
-var preflash_lift_max = 62; // max Lightness lift in upper tones at strength=100
+var preflash_lift_max = 52; // max Lightness lift in upper tones at strength=100
 var preflash_black_lift_max = 40; // max blackpoint lift at strength=100
 var preflash_comp_midtone_max = 26; // max midtone pullback after lift
 var preflash_comp_highlight_max = 38; // max highlight pullback after lift
@@ -737,21 +737,27 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 	var strengthNorm = pre_flash_strength / 100;
 	function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
 	// Chroma can increase perceived contrast, so add a mild Lightness lift compensation.
-	var chromaScaleMax = 1.35;
-	var chromaScale = chromaScaleMax * strengthNorm;
-	var chromaLumaComp = 1 + 0.12 * (chromaScale / chromaScaleMax);
-	var chromaHighlightRollback = 12 * (chromaScale / chromaScaleMax) * (0.9 + 0.1 * paperResponseCoverage);
+	var chromaScaleMax = 1.25;
+	var highStrengthRoll = Math.pow(Math.max(0, Math.min(1, (strengthNorm - 0.82) / 0.18)), 1.35);
+	var topEndLimiter = 1 - 0.24 * highStrengthRoll;
+	var chromaScale = chromaScaleMax * strengthNorm * topEndLimiter;
+	var chromaNorm = chromaScale / chromaScaleMax;
+	var chromaLumaComp = 1 + 0.28 * chromaNorm;
+	// Unified exposure driver so higher strength/chroma visibly brightens the preflash result.
+	var strengthLiftComp = 1 + 0.52 * Math.pow(strengthNorm, 1.12) * (0.7 + 0.3 * chromaNorm) * topEndLimiter;
+	var chromaBlackLiftComp = 1 + (chromaScale / chromaScaleMax);
+	var chromaHighlightRollback = 10 * chromaNorm * (0.9 + 0.1 * paperResponseCoverage);
 
-	var liftAmt = preflash_lift_max * strengthNorm * (0.9 + 0.25 * wholeMaskCoverage) * chromaLumaComp;
+	var liftAmt = preflash_lift_max * strengthNorm * (0.9 + 0.25 * wholeMaskCoverage) * chromaLumaComp * strengthLiftComp;
 	// Stronger toe response across the whole strength range.
 	var blackLiftNorm = Math.pow(strengthNorm, 0.82);
 	var blackLiftFactor = preserve_blackpoint ? (1 - (blackpoint_restore_strength / 100)) : 1;
-	var blackLiftAmt = preflash_black_lift_max * blackLiftNorm * (0.85 + 0.15 * wholeMaskCoverage) * blackLiftFactor;
-	var compMid = preflash_comp_midtone_max * strengthNorm * (0.8 + 0.2 * wholeMaskCoverage);
+	var blackLiftAmt = preflash_black_lift_max * blackLiftNorm * (0.85 + 0.15 * wholeMaskCoverage) * blackLiftFactor * chromaBlackLiftComp * strengthLiftComp;
+	var compMid = preflash_comp_midtone_max * strengthNorm * (0.8 + 0.2 * wholeMaskCoverage) * (1 - 0.30 * chromaNorm) / strengthLiftComp;
 	var whiteCompFactor = preserve_whitepoint ? (1 - (whitepoint_restore_strength / 100)) : 1;
-	var compHigh = preflash_comp_highlight_max * strengthNorm * (0.95 + 0.25 * paperResponseCoverage) * whiteCompFactor;
+	var compHigh = preflash_comp_highlight_max * strengthNorm * (0.95 + 0.25 * paperResponseCoverage) * whiteCompFactor * (1 - 0.18 * chromaNorm) / strengthLiftComp;
 	var crushNorm = Math.max(0, Math.min(1, (strengthNorm - 0.58) / 0.42));
-	var crushAmt = 34 * crushNorm * crushNorm * (0.85 + 0.15 * paperResponseCoverage);
+	var crushAmt = (34 * crushNorm * crushNorm * (0.85 + 0.15 * paperResponseCoverage)) / (0.9 + 0.6 * strengthLiftComp);
 
 	function paperTonePoint(v) {
 		var t = v / 255.0;
@@ -918,19 +924,28 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 		doc.activeChannels = savedChannels;
 	}
 
-	// Separate global endpoint curve pass.
-	// At strength=100 and preserve disabled: black->10, white->250.
+	// Separate global endpoint Levels pass.
+	// At strength=100 and preserve disabled: output black->14, output white->250.
 	if (!preserve_blackpoint || !preserve_whitepoint) {
-		var targetBlack = preserve_blackpoint ? 0 : clamp255(Math.round(10 * strengthNorm));
+		var targetBlack = preserve_blackpoint ? 0 : clamp255(Math.round(14 * strengthNorm));
 		var targetWhite = preserve_whitepoint ? 255 : clamp255(255 - Math.round(5 * strengthNorm));
 		if (targetWhite <= targetBlack) targetWhite = Math.min(255, targetBlack + 1);
 		doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 		try {
-			imagelayer.adjustCurves([
-				[0, targetBlack],
-				[128, 128],
-				[255, targetWhite]
-			]);
+			var endpointGamma = 1.0;
+			var midInFinal = 128;
+			if (targetWhite > targetBlack) {
+				var tFinal = midInFinal / 255.0;
+				var tPrimeFinal = (midInFinal - targetBlack) / (targetWhite - targetBlack);
+				if (tFinal > 0 && tFinal < 1 && tPrimeFinal > 0 && tPrimeFinal < 1) {
+					try {
+						endpointGamma = Math.log(tFinal) / Math.log(tPrimeFinal);
+						if (!isFinite(endpointGamma) || endpointGamma <= 0) endpointGamma = 1.0;
+						endpointGamma = Math.max(0.25, Math.min(4.0, endpointGamma));
+					} catch (e) { endpointGamma = 1.0; }
+				}
+			}
+			imagelayer.adjustLevels(0, 255, endpointGamma, targetBlack, targetWhite);
 		} catch (e) {}
 		doc.activeChannels = savedChannels;
 	}
