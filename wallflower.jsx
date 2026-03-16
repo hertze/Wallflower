@@ -834,8 +834,8 @@ try {
 			// and the precomputed mask coverage rather than global mean brightness.
 			var strengthNorm = pre_flash_strength / 100;
 			var damp = Math.min(preflash_damp_max, strengthNorm * preflash_damp_max);
-			var midComp = Math.round((24 + 40 * paperResponseCoverage) * strengthNorm * (0.8 + damp * 0.65));
-			var shoulderComp = Math.round((14 + 30 * wholeMaskCoverage) * strengthNorm * (0.8 + (1 - preflash_mid_blend) * 0.4));
+			var midComp = Math.round((28 + 46 * paperResponseCoverage) * strengthNorm * (0.9 + damp * 0.75));
+			var shoulderComp = Math.round((18 + 34 * wholeMaskCoverage) * strengthNorm * (0.9 + (1 - preflash_mid_blend) * 0.45));
 			function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
 			function gentle(v) {
 				var t = v / 255.0; // 0..1
@@ -857,7 +857,10 @@ try {
 			var p32 = comp(32);
 			var p64 = Math.round(comp(64) * (1 - midBlend) + gentle(64) * midBlend);
 			var p128 = Math.round(comp(128) * (1 - midBlend) + gentle(128) * midBlend);
-			var p192 = comp(192);
+			var p160Raw = comp(160);
+			var p160 = Math.min(p160Raw, p128 + (160 - 128));
+			var p192Raw = comp(192);
+			var p192 = Math.min(p192Raw, p160 + (192 - 160));
 			// Lower the 255 anchor by the same amount as p192 so highlight contrast does not increase.
 			var p255 = Math.max(p192, Math.min(255, p192 + (255 - 192)));
 			// Constrain the shoulder spline with an intermediate anchor on the same linear falloff.
@@ -868,6 +871,7 @@ try {
 				[32, p32],
 				[64, p64],
 				[128, p128],
+				[160, p160],
 				[192, p192],
 				[224, p224],
 				[255, p255]
