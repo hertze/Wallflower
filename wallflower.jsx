@@ -861,10 +861,12 @@ try {
 			var p160 = Math.min(p160Raw, p128 + (160 - 128));
 			var p192Raw = comp(192);
 			var p192 = Math.min(p192Raw, p160 + (192 - 160));
-			// Lower the 255 anchor by the same amount as p192 so highlight contrast does not increase.
-			var p255 = Math.max(p192, Math.min(255, p192 + (255 - 192)));
-			// Constrain the shoulder spline with an intermediate anchor on the same linear falloff.
-			var p224 = Math.max(p192, Math.min(p255, p192 + (224 - 192)));
+			// Keep the upper shoulder on the same compensation model so very bright
+			// highlights are lowered at least as much as lower highlights.
+			var p224Raw = comp(224);
+			var p224 = Math.max(p192, Math.min(p224Raw, p192 + (224 - 192)));
+			var p255Raw = comp(255);
+			var p255 = Math.max(p224, Math.min(p255Raw, p224 + (255 - 224)));
 			// Step 1: preflash compensation curve - pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
