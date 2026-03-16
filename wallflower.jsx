@@ -17,8 +17,10 @@ var pre_flash_b = 86;
 var pre_flash_strength = 20;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
-var save_whitepoint = true;
-var save_blackpoint = true;
+var preserve_whitepoint = false;
+var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
+var preserve_blackpoint = true;
+var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var desaturation = true;
 
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
@@ -28,6 +30,9 @@ var desaturation_amount_setting = 20; // user-editable amount (1..100) used as d
 
 var preflash_auto_samples = 5; // grid samples per axis (5x5)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
+
+var highlight_mask_gamma = 1.0; // gamma to bias highlight mask when building (lower = more midtone coverage)
+var whole_mask_gamma = 1.0; // gamma to bias whole mask when building (lower = more midtone coverage)
 
 // Preflash tuning
 // - `preflash_damp_max` (0..1): overall exposure/contrast damping applied
@@ -76,10 +81,8 @@ var preflash_min_factor = 0.35;
 //   recovery.
 var blackpoint_threshold_fraction = 0.003;  // fraction of pixels to consider 'significant' (5%)
 var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this brighter than post-curve
-var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var whitepoint_threshold_fraction = 0.003; // tight (0.1%) - finds the actual top-end occupied bin, not clipped specular
 var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
-var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
 
 var save = false;
 		
@@ -159,7 +162,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	if (saveWhiteParam !== undefined) {
 		dialog.savewhite.value = (saveWhiteParam.toLowerCase() === "true");
 	} else {
-		dialog.savewhite.value = save_whitepoint;
+		dialog.savewhite.value = preserve_whitepoint;
 	}
 	if (whiteRestoreParam !== undefined) {
 		dialog.whiteRestoreAmount.text = whiteRestoreParam.toString();
@@ -180,7 +183,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	if (saveBlackParam !== undefined) {
 		dialog.saveblack.value = (saveBlackParam.toLowerCase() === "true");
 	} else {
-		dialog.saveblack.value = save_blackpoint;
+		dialog.saveblack.value = preserve_blackpoint;
 	}
 	if (blackRestoreParam !== undefined) {
 		dialog.blackRestoreAmount.text = blackRestoreParam.toString();
@@ -227,8 +230,8 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 		saveStatus = dialog.savestatus.value.toString();
 		autoAdjust = dialog.autoadjust.value.toString();
 		desaturation = dialog.desaturation.value.toString();
-		save_whitepoint = dialog.savewhite.value.toString();
-		save_blackpoint = dialog.saveblack.value.toString();
+		preserve_whitepoint = dialog.savewhite.value.toString();
+		preserve_blackpoint = dialog.saveblack.value.toString();
 		var _ds = parseInt(dialog.desatAmount.text); if (!isNaN(_ds)) desaturation_amount_setting = _ds;
 		var _bp = parseInt(dialog.blackRestoreAmount.text); if (!isNaN(_bp)) blackpoint_restore_strength = _bp;
 		var _wp = parseInt(dialog.whiteRestoreAmount.text); if (!isNaN(_wp)) whitepoint_restore_strength = _wp;
@@ -252,8 +255,8 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 		"recipe": thisRecipe,
 		"savestatus": saveStatus,
 		"autoadjust": autoAdjust,
-		"savewhitepoint": save_whitepoint,
-		"saveblackpoint": save_blackpoint,
+		"savewhitepoint": preserve_whitepoint,
+		"saveblackpoint": preserve_blackpoint,
 		"desaturation": desaturation,
 		"desatamount": desaturation_amount_setting,
 		"blackrestoreamt": blackpoint_restore_strength,
@@ -358,13 +361,13 @@ function processRecipe(runtimesettings) {
 	var autoAdjustSetting = runtimesettings.autoadjust;
 	var desatSetting = runtimesettings.desaturation;
 	save = (saveStatus.toLowerCase() === "true");
-		// Apply save_whitepoint setting from dialog/playbackParameters if present
+		// Apply preserve_whitepoint setting from dialog/playbackParameters if present
 		if (runtimesettings.savewhitepoint !== undefined && runtimesettings.savewhitepoint !== null) {
-			save_whitepoint = (runtimesettings.savewhitepoint.toLowerCase() === "true");
+			preserve_whitepoint = (runtimesettings.savewhitepoint.toLowerCase() === "true");
 		}
-		// Apply save_blackpoint setting from dialog/playbackParameters if present
+		// Apply preserve_blackpoint setting from dialog/playbackParameters if present
 		if (runtimesettings.saveblackpoint !== undefined && runtimesettings.saveblackpoint !== null) {
-			save_blackpoint = (runtimesettings.saveblackpoint.toLowerCase() === "true");
+			preserve_blackpoint = (runtimesettings.saveblackpoint.toLowerCase() === "true");
 		}
 	thisRecipe = thisRecipe.replace(/\s+/g, ""); // Removes spaces
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
@@ -762,17 +765,17 @@ try {
 
 		// Create luminance masks (pass scaled blur radius)
 		// Pass an explicit gamma (third argument) for Whole and Highlight masks to bias midtones when needed
-		createLuminanceMasks(0, 255, 1.0, "Whole Mask", doc_scale * blur_radius);
-		createLuminanceMasks(192, 255, 0.8, "Highlight Mask", 0);
+		createLuminanceMasks(0, 255, whole_mask_gamma, "Whole Mask", doc_scale * blur_radius);
+		createLuminanceMasks(192, 255, highlight_mask_gamma, "Highlight Mask", 0);
 
 		// Check initial black/white points in Lab before preflash modifies the image.
 		var initialBlackPoint = 0;
 		var initialWhitePoint = 255;
-		if (save_blackpoint || save_whitepoint) {
+		if (preserve_blackpoint || preserve_whitepoint) {
 			try {
 				doc.changeMode(ChangeMode.LAB);
-				if (save_blackpoint) initialBlackPoint = computeImageBlackPoint();
-				if (save_whitepoint) initialWhitePoint = computeImageWhitePoint(whitepoint_threshold_fraction);
+				if (preserve_blackpoint) initialBlackPoint = computeImageBlackPoint();
+				if (preserve_whitepoint) initialWhitePoint = computeImageWhitePoint(whitepoint_threshold_fraction);
 				doc.changeMode(ChangeMode.RGB);
 			} catch (e) { initialBlackPoint = 0; initialWhitePoint = 255; }
 		}
@@ -841,7 +844,7 @@ try {
 
 			doc.activeChannels = savedChannels;
 
-			if (save_blackpoint) {
+			if (preserve_blackpoint) {
 				actualPostLevelBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
 				bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
 				if (actualPostLevelBlack > bp + blackpoint_tolerance) {
@@ -849,7 +852,7 @@ try {
 					needBlack = true;
 				}
 			}
-			if (save_whitepoint) {
+			if (preserve_whitepoint) {
 				actualPostLevelWhite = Math.max(0, Math.min(255, Math.round(computeImageWhitePoint(whitepoint_threshold_fraction))));
 				wp = Math.max(0, Math.min(255, Math.round(initialWhitePoint || 255)));
 				if (actualPostLevelWhite < wp - whitepoint_tolerance) {
