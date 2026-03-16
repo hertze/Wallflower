@@ -126,6 +126,14 @@ var save = false;
 // END__HARVEST_EXCEPTION_ZSTRING
 */
 
+function coerceBoolean(value, fallback) {
+	if (value === undefined || value === null) return (fallback === true);
+	if (typeof value === "boolean") return value;
+	if (typeof value === "string") return (value.toLowerCase() === "true");
+	if (typeof value === "number") return (value !== 0);
+	return (fallback === true);
+}
+
 
 function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveWhiteParam, desatParam, desatAmountParam, blackRestoreParam, whiteRestoreParam, runmode) {
 	// Display dialog box.
@@ -151,11 +159,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	
 	// Auto-adjust preflash checkbox
 	dialog.autoadjust = dialog.add("checkbox", undefined, "Auto-adjust Preflash");
-	if (autoAdjust !== undefined) {
-		dialog.autoadjust.value = (autoAdjust.toLowerCase() === "true");
-	} else {
-		dialog.autoadjust.value = auto_adjust_preflash;
-	}
+	dialog.autoadjust.value = coerceBoolean(autoAdjust, auto_adjust_preflash);
 
 	// Keep White Point checkbox + restore strength field
 	var savewhiteGroup = dialog.add("group");
@@ -167,11 +171,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	try { dialog.whiteRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
 	var whitePctLabel = savewhiteGroup.add("statictext", undefined, "%");
 	try { whitePctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
-	if (saveWhiteParam !== undefined) {
-		dialog.savewhite.value = (saveWhiteParam.toLowerCase() === "true");
-	} else {
-		dialog.savewhite.value = preserve_whitepoint;
-	}
+	dialog.savewhite.value = coerceBoolean(saveWhiteParam, preserve_whitepoint);
 	if (whiteRestoreParam !== undefined) {
 		dialog.whiteRestoreAmount.text = whiteRestoreParam.toString();
 	} else {
@@ -188,11 +188,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	try { dialog.blackRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
 	var blackPctLabel = saveblackGroup.add("statictext", undefined, "%");
 	try { blackPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
-	if (saveBlackParam !== undefined) {
-		dialog.saveblack.value = (saveBlackParam.toLowerCase() === "true");
-	} else {
-		dialog.saveblack.value = preserve_blackpoint;
-	}
+	dialog.saveblack.value = coerceBoolean(saveBlackParam, preserve_blackpoint);
 	if (blackRestoreParam !== undefined) {
 		dialog.blackRestoreAmount.text = blackRestoreParam.toString();
 	} else {
@@ -211,11 +207,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	var desatPctLabel = desatGroup.add("statictext", undefined, "%");
 	try { desatPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
 
-	if (desatParam !== undefined) {
-		dialog.desaturation.value = (desatParam.toLowerCase() === "true");
-	} else {
-		dialog.desaturation.value = desaturation;
-	}
+	dialog.desaturation.value = coerceBoolean(desatParam, desaturation);
 	if (desatAmountParam !== undefined) {
 		dialog.desatAmount.text = desatAmountParam;
 	} else {
@@ -223,11 +215,7 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	}
 
 	dialog.savestatus = dialog.add("checkbox", undefined, "Save and Close When Done");
-	if (saveStatus !== undefined) {
-		dialog.savestatus.value = (saveStatus.toLowerCase() === "true");
-	} else {
-		dialog.savestatus.value
-	}
+	dialog.savestatus.value = coerceBoolean(saveStatus, save);
 
 	var buttons = dialog.add( "group" );
 	var submit = buttons.add("button", undefined, undefined, { name: "submit" });
@@ -235,9 +223,9 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 	
 	submit.onClick = function () {
 		thisRecipe = dialog.edittext1.text;
-		saveStatus = dialog.savestatus.value.toString();
-		autoAdjust = dialog.autoadjust.value.toString();
-		desaturation = dialog.desaturation.value.toString();
+		saveStatus = dialog.savestatus.value;
+		autoAdjust = dialog.autoadjust.value;
+		desaturation = dialog.desaturation.value;
 		preserve_whitepoint = dialog.savewhite.value;
 		preserve_blackpoint = dialog.saveblack.value;
 		var _ds = parseInt(dialog.desatAmount.text); if (!isNaN(_ds)) desaturation_amount_setting = _ds;
@@ -282,18 +270,18 @@ function getRecipe() {
 		if (!result.recipe || result.recipe == '') { isCancelled = true; return } else {
 			var d = new ActionDescriptor;
 			d.putString(stringIDToTypeID('recipe'), result.recipe);
-			d.putString(stringIDToTypeID('savestatus'), result.savestatus);
+			d.putBoolean(stringIDToTypeID('savestatus'), coerceBoolean(result.savestatus, save));
 				if (result.autoadjust !== undefined && result.autoadjust !== null) {
-					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
+					d.putBoolean(stringIDToTypeID('autoadjust'), coerceBoolean(result.autoadjust, auto_adjust_preflash));
 				}
 				if (result.savewhitepoint !== undefined && result.savewhitepoint !== null) {
-					d.putString(stringIDToTypeID('savewhitepoint'), result.savewhitepoint);
+					d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
 				}
 				if (result.saveblackpoint !== undefined && result.saveblackpoint !== null) {
-					d.putString(stringIDToTypeID('saveblackpoint'), result.saveblackpoint);
+					d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
 				}
 				if (result.desaturation !== undefined && result.desaturation !== null) {
-					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
+					d.putBoolean(stringIDToTypeID('desaturation'), coerceBoolean(result.desaturation, desaturation));
 				}
 				if (result.desatamount !== undefined && result.desatamount !== null) {
 					d.putInteger(stringIDToTypeID('desatamount'), result.desatamount);
@@ -310,7 +298,7 @@ function getRecipe() {
 	}
 	else {
 		var recipe = app.playbackParameters.getString(stringIDToTypeID('recipe'));
-		var savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus'));
+		var savestatus = null;
 		var autoadjust = null;
 		var saveblack = null;
 		var savewhite = null;
@@ -318,10 +306,21 @@ function getRecipe() {
 		var desatamount = null;
 		var blackrestoreamt = null;
 		var whiterestoreamt = null;
-		try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(e) { autoadjust = undefined; }
-		try { saveblack = app.playbackParameters.getString(stringIDToTypeID('saveblackpoint')); } catch(e) { saveblack = undefined; }
-		try { savewhite = app.playbackParameters.getString(stringIDToTypeID('savewhitepoint')); } catch(e) { savewhite = undefined; }
-		try { desat = app.playbackParameters.getString(stringIDToTypeID('desaturation')); } catch(e) { desat = undefined; }
+		try { savestatus = app.playbackParameters.getBoolean(stringIDToTypeID('savestatus')); } catch(e) {
+			try { savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus')); } catch(ee) { savestatus = undefined; }
+		}
+		try { autoadjust = app.playbackParameters.getBoolean(stringIDToTypeID('autoadjust')); } catch(e) {
+			try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(ee) { autoadjust = undefined; }
+		}
+		try { saveblack = app.playbackParameters.getBoolean(stringIDToTypeID('saveblackpoint')); } catch(e) {
+			try { saveblack = app.playbackParameters.getString(stringIDToTypeID('saveblackpoint')); } catch(ee) { saveblack = undefined; }
+		}
+		try { savewhite = app.playbackParameters.getBoolean(stringIDToTypeID('savewhitepoint')); } catch(e) {
+			try { savewhite = app.playbackParameters.getString(stringIDToTypeID('savewhitepoint')); } catch(ee) { savewhite = undefined; }
+		}
+		try { desat = app.playbackParameters.getBoolean(stringIDToTypeID('desaturation')); } catch(e) {
+			try { desat = app.playbackParameters.getString(stringIDToTypeID('desaturation')); } catch(ee) { desat = undefined; }
+		}
 		try { desatamount = app.playbackParameters.getInteger(stringIDToTypeID('desatamount')); } catch(e) { desatamount = undefined; }
 		try { blackrestoreamt = app.playbackParameters.getInteger(stringIDToTypeID('blackrestoreamt')); } catch(e) { blackrestoreamt = undefined; }
 		try { whiterestoreamt = app.playbackParameters.getInteger(stringIDToTypeID('whiterestoreamt')); } catch(e) { whiterestoreamt = undefined; }
@@ -332,11 +331,11 @@ function getRecipe() {
 			if (!result.recipe || result.recipe == "") { isCancelled = true; return } else {
 				var d = new ActionDescriptor;
 				d.putString(stringIDToTypeID('recipe'), result.recipe);
-				d.putString(stringIDToTypeID('savestatus'), result.savestatus);
-					d.putString(stringIDToTypeID('autoadjust'), result.autoadjust);
-					d.putString(stringIDToTypeID('savewhitepoint'), result.savewhitepoint);
-					d.putString(stringIDToTypeID('saveblackpoint'), result.saveblackpoint);
-					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
+				d.putBoolean(stringIDToTypeID('savestatus'), coerceBoolean(result.savestatus, save));
+					d.putBoolean(stringIDToTypeID('autoadjust'), coerceBoolean(result.autoadjust, auto_adjust_preflash));
+					d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
+					d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
+					d.putBoolean(stringIDToTypeID('desaturation'), coerceBoolean(result.desaturation, desaturation));
 					d.putInteger(stringIDToTypeID('desatamount'), result.desatamount);
 					d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
 					d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
@@ -368,14 +367,14 @@ function processRecipe(runtimesettings) {
 	var saveStatus = runtimesettings.savestatus;
 	var autoAdjustSetting = runtimesettings.autoadjust;
 	var desatSetting = runtimesettings.desaturation;
-	save = (saveStatus.toLowerCase() === "true");
+	save = coerceBoolean(saveStatus, false);
 		// Apply preserve_whitepoint setting from dialog/playbackParameters if present
 		if (runtimesettings.savewhitepoint !== undefined && runtimesettings.savewhitepoint !== null) {
-			preserve_whitepoint = (runtimesettings.savewhitepoint.toLowerCase() === "true");
+			preserve_whitepoint = coerceBoolean(runtimesettings.savewhitepoint, preserve_whitepoint);
 		}
 		// Apply preserve_blackpoint setting from dialog/playbackParameters if present
 		if (runtimesettings.saveblackpoint !== undefined && runtimesettings.saveblackpoint !== null) {
-			preserve_blackpoint = (runtimesettings.saveblackpoint.toLowerCase() === "true");
+			preserve_blackpoint = coerceBoolean(runtimesettings.saveblackpoint, preserve_blackpoint);
 		}
 	thisRecipe = thisRecipe.replace(/\s+/g, ""); // Removes spaces
 	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
@@ -392,11 +391,11 @@ function processRecipe(runtimesettings) {
 		blur_radius = parseInt(thisRecipe[4]);
 		// Apply autoadjust setting from dialog/playbackParameters if present
 		if (autoAdjustSetting !== undefined && autoAdjustSetting !== null) {
-			auto_adjust_preflash = (autoAdjustSetting.toLowerCase() === "true");
+			auto_adjust_preflash = coerceBoolean(autoAdjustSetting, auto_adjust_preflash);
 		}
 			// Apply desaturation setting from dialog/playbackParameters if present
 			if (desatSetting !== undefined && desatSetting !== null) {
-				desaturation = (desatSetting.toLowerCase() === "true");
+				desaturation = coerceBoolean(desatSetting, desaturation);
 			}
 			// Apply desaturation amount (percent) from dialog/playbackParameters if present
 			if (runtimesettings.desatamount !== undefined && runtimesettings.desatamount !== null) {
@@ -735,91 +734,158 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 
 	// Step 1: single paper-shaped Lightness curve in Lab (toe, straight-line, shoulder).
 	var strengthNorm = pre_flash_strength / 100;
+	function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 	function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
-	// Chroma can increase perceived contrast, so add a mild Lightness lift compensation.
-	var chromaScaleMax = 1.25;
-	var highStrengthRoll = Math.pow(Math.max(0, Math.min(1, (strengthNorm - 0.82) / 0.18)), 1.35);
-	var topEndLimiter = 1 - 0.24 * highStrengthRoll;
-	var chromaScale = chromaScaleMax * strengthNorm * topEndLimiter;
-	var chromaNorm = chromaScale / chromaScaleMax;
-	var chromaLumaComp = 1 + 0.28 * chromaNorm;
-	// Unified exposure driver so higher strength/chroma visibly brightens the preflash result.
-	var strengthLiftComp = 1 + 0.52 * Math.pow(strengthNorm, 1.12) * (0.7 + 0.3 * chromaNorm) * topEndLimiter;
-	var chromaBlackLiftComp = 1 + (chromaScale / chromaScaleMax);
-	var chromaHighlightRollback = 10 * chromaNorm * (0.9 + 0.1 * paperResponseCoverage);
+	function solveLevelsGamma(midIn, inBlack, inWhite, outBlack, outWhite) {
+		var gamma = 1.0;
+		if (inWhite > inBlack && outWhite > outBlack) {
+			var t = (midIn - inBlack) / (inWhite - inBlack);
+			var tprime = (midIn - outBlack) / (outWhite - outBlack);
+			if (t > 0 && t < 1 && tprime > 0 && tprime < 1) {
+				try {
+					gamma = Math.log(t) / Math.log(tprime);
+					if (!isFinite(gamma) || gamma <= 0) gamma = 1.0;
+					gamma = Math.max(0.25, Math.min(4.0, gamma));
+				} catch (e) { gamma = 1.0; }
+			}
+		}
+		return gamma;
+	}
+	function computeToneParams() {
+		// Chroma can increase perceived contrast, so add a mild Lightness lift compensation.
+		var chromaScaleMax = 1.25;
+		var highStrengthRoll = Math.pow(clamp01((strengthNorm - 0.82) / 0.18), 1.35);
+		var topEndLimiter = 1 - 0.24 * highStrengthRoll;
+		var chromaScale = chromaScaleMax * strengthNorm * topEndLimiter;
+		var chromaNorm = chromaScale / chromaScaleMax;
+		var chromaLumaComp = 1 + 0.28 * chromaNorm;
+		// Unified exposure driver so higher strength/chroma visibly brightens the preflash result.
+		var strengthLiftComp = 1 + 0.52 * Math.pow(strengthNorm, 1.12) * (0.7 + 0.3 * chromaNorm) * topEndLimiter;
+		var chromaBlackLiftComp = 1 + chromaNorm;
+		var chromaHighlightRollback = 10 * chromaNorm * (0.9 + 0.1 * paperResponseCoverage);
 
-	var liftAmt = preflash_lift_max * strengthNorm * (0.9 + 0.25 * wholeMaskCoverage) * chromaLumaComp * strengthLiftComp;
-	// Stronger toe response across the whole strength range.
-	var blackLiftNorm = Math.pow(strengthNorm, 0.82);
-	var blackLiftFactor = preserve_blackpoint ? (1 - (blackpoint_restore_strength / 100)) : 1;
-	var blackLiftAmt = preflash_black_lift_max * blackLiftNorm * (0.85 + 0.15 * wholeMaskCoverage) * blackLiftFactor * chromaBlackLiftComp * strengthLiftComp;
-	var compMid = preflash_comp_midtone_max * strengthNorm * (0.8 + 0.2 * wholeMaskCoverage) * (1 - 0.30 * chromaNorm) / strengthLiftComp;
-	var whiteCompFactor = preserve_whitepoint ? (1 - (whitepoint_restore_strength / 100)) : 1;
-	var compHigh = preflash_comp_highlight_max * strengthNorm * (0.95 + 0.25 * paperResponseCoverage) * whiteCompFactor * (1 - 0.18 * chromaNorm) / strengthLiftComp;
-	var crushNorm = Math.max(0, Math.min(1, (strengthNorm - 0.58) / 0.42));
-	var crushAmt = (34 * crushNorm * crushNorm * (0.85 + 0.15 * paperResponseCoverage)) / (0.9 + 0.6 * strengthLiftComp);
+		var liftAmt = preflash_lift_max * strengthNorm * (0.9 + 0.25 * wholeMaskCoverage) * chromaLumaComp * strengthLiftComp;
+		// Stronger toe response across the whole strength range.
+		var blackLiftNorm = Math.pow(strengthNorm, 0.82);
+		var blackLiftFactor = preserve_blackpoint ? (1 - (blackpoint_restore_strength / 100)) : 1;
+		var blackLiftAmt = preflash_black_lift_max * blackLiftNorm * (0.85 + 0.15 * wholeMaskCoverage) * blackLiftFactor * chromaBlackLiftComp * strengthLiftComp;
+		var compMid = preflash_comp_midtone_max * strengthNorm * (0.8 + 0.2 * wholeMaskCoverage) * (1 - 0.30 * chromaNorm) / strengthLiftComp;
+		var whiteCompFactor = preserve_whitepoint ? (1 - (whitepoint_restore_strength / 100)) : 1;
+		var compHigh = preflash_comp_highlight_max * strengthNorm * (0.95 + 0.25 * paperResponseCoverage) * whiteCompFactor * (1 - 0.18 * chromaNorm) / strengthLiftComp;
+		var crushNorm = clamp01((strengthNorm - 0.58) / 0.42);
+		var crushAmt = (34 * crushNorm * crushNorm * (0.85 + 0.15 * paperResponseCoverage)) / (0.9 + 0.6 * strengthLiftComp);
 
-	function paperTonePoint(v) {
-		var t = v / 255.0;
-		var toe = Math.pow(1 - t, 2.2);
-		var mid = 4 * t * (1 - t);
-		var shoulder = Math.pow(t, 2.4);
-		var highlightProtect = 1 - 0.65 * shoulder;
-		var y = v;
-		// Lift through the straight-line region, add matte toe lift,
-		// then compress mids/highlights and high-strength toe.
-		y += liftAmt * (0.16 + 0.82 * Math.pow(t, 0.85)) * highlightProtect;
-		y += blackLiftAmt * toe * 1.1;
-		y -= compMid * mid * 0.95;
-		y -= compHigh * shoulder * 1.22;
-		y -= chromaHighlightRollback * shoulder * shoulder;
-		y -= crushAmt * Math.pow(1 - t, 1.8) * 0.8;
-		return clamp255(y);
+		function paperTonePoint(v) {
+			var t = v / 255.0;
+			var toe = Math.pow(1 - t, 2.2);
+			var mid = 4 * t * (1 - t);
+			var shoulder = Math.pow(t, 2.4);
+			var highlightProtect = 1 - 0.65 * shoulder;
+			var midProtect = 1 - 0.32 * mid;
+			var y = v;
+			// Lift through the straight-line region, add matte toe lift,
+			// then compress mids/highlights and high-strength toe.
+			y += liftAmt * (0.10 + 0.72 * Math.pow(t, 1.05)) * highlightProtect * midProtect;
+			y += blackLiftAmt * toe * 1.1;
+			y -= compMid * mid * 1.14;
+			y -= compHigh * shoulder * 1.22;
+			y -= chromaHighlightRollback * shoulder * shoulder;
+			y -= crushAmt * Math.pow(1 - t, 1.8) * 0.8;
+			return clamp255(y);
+		}
+
+		var p0 = paperTonePoint(0);
+		var p32 = paperTonePoint(32);
+		var p64 = paperTonePoint(64);
+		var p128 = paperTonePoint(128);
+		var p160 = paperTonePoint(160);
+		var p192 = paperTonePoint(192);
+		var p224 = paperTonePoint(224);
+		var p255 = paperTonePoint(255);
+
+		// Keep anchors monotonic.
+		p32 = Math.max(p0, p32);
+		p64 = Math.max(p32, p64);
+		p128 = Math.max(p64, p128);
+		p160 = Math.max(p128, p160);
+		p192 = Math.max(p160, p192);
+		p224 = Math.max(p192, p224);
+		p255 = Math.max(p224, p255);
+
+		return {
+			p128: p128,
+			chromaScale: chromaScale,
+			curvePoints: [
+				[0, p0],
+				[32, p32],
+				[64, p64],
+				[128, p128],
+				[160, p160],
+				[192, p192],
+				[224, p224],
+				[255, p255]
+			]
+		};
 	}
 
-	var p0 = paperTonePoint(0);
-	var p32 = paperTonePoint(32);
-	var p64 = paperTonePoint(64);
-	var p128 = paperTonePoint(128);
-	var p160 = paperTonePoint(160);
-	var p192 = paperTonePoint(192);
-	var p224 = paperTonePoint(224);
-	var p255 = paperTonePoint(255);
+	function applyLightness(curvePoints) {
+		var lightnessLayer = imagelayer.duplicate();
+		lightnessLayer.name = "Preflash Lightness";
+		doc.activeLayer = lightnessLayer;
+		doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+		lightnessLayer.adjustCurves(curvePoints);
+		doc.activeChannels = savedChannels;
+		doc.selection.load(doc.channels.getByName("Whole Mask"));
+		doc.selection.invert();
+		doc.selection.clear();
+		doc.selection.deselect();
+		lightnessLayer.merge();
+		imagelayer = doc.activeLayer;
+	}
 
-	// Keep anchors monotonic.
-	p32 = Math.max(p0, p32);
-	p64 = Math.max(p32, p64);
-	p128 = Math.max(p64, p128);
-	p160 = Math.max(p128, p160);
-	p192 = Math.max(p160, p192);
-	p224 = Math.max(p192, p224);
-	p255 = Math.max(p224, p255);
+	function applyChroma(chromaScale) {
+		var chromaLayer = imagelayer.duplicate();
+		chromaLayer.name = "Preflash Chroma";
+		doc.activeLayer = chromaLayer;
 
+		// Strong, linear chroma ramp for predictable behavior.
+		var targetA = preflashColor.lab.a;
+		var targetB = preflashColor.lab.b;
+		var deltaA = Math.round(targetA * chromaScale);
+		var deltaB = Math.round(targetB * chromaScale);
+
+		function shiftedCurve(delta) {
+			return [
+				[0, clamp255(0 + delta)],
+				[128, clamp255(128 + delta)],
+				[255, clamp255(255 + delta)]
+			];
+		}
+
+		var originalLabChannels = doc.activeChannels;
+		doc.selection.load(doc.channels.getByName("Whole Mask"), SelectionType.REPLACE);
+
+		// Shift a channel
+		doc.activeChannels = [doc.channels.getByName("a")];
+		chromaLayer.adjustCurves(shiftedCurve(deltaA));
+
+		// Shift b channel
+		doc.activeChannels = [doc.channels.getByName("b")];
+		chromaLayer.adjustCurves(shiftedCurve(deltaB));
+
+		// Keep chroma change strictly inside Whole Mask by removing layer pixels outside the mask.
+		doc.selection.invert();
+		doc.activeChannels = originalLabChannels;
+		doc.selection.clear();
+		doc.activeChannels = originalLabChannels;
+		doc.selection.deselect();
+		chromaLayer.merge();
+		imagelayer = doc.activeLayer;
+	}
+
+	var tone = computeToneParams();
 	// Endpoint mapping is handled in a separate final curve pass below.
-
-	// Apply the Lightness curve only inside the Whole Mask.
-	var curvePoints = [
-		[0, p0],
-		[32, p32],
-		[64, p64],
-		[128, p128],
-		[160, p160],
-		[192, p192],
-		[224, p224],
-		[255, p255]
-	];
-	var lightnessLayer = imagelayer.duplicate();
-	lightnessLayer.name = "Preflash Lightness";
-	doc.activeLayer = lightnessLayer;
-	doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
-	lightnessLayer.adjustCurves(curvePoints);
-	doc.activeChannels = savedChannels;
-	doc.selection.load(doc.channels.getByName("Whole Mask"));
-	doc.selection.invert();
-	doc.selection.clear();
-	doc.selection.deselect();
-	lightnessLayer.merge();
-	imagelayer = doc.activeLayer;
+	applyLightness(tone.curvePoints);
 
 	// Step 2: restore black and/or white point in a single curve pass.
 	var needBlack = false, needWhite = false;
@@ -830,43 +896,7 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 
 		// Step 3: add chroma in Lab safely by shifting a/b channels (relative move from current values).
 	// This avoids hue inversion from absolute fills and keeps tonal work isolated in Lightness.
-	var chromaLayer = imagelayer.duplicate();
-	chromaLayer.name = "Preflash Chroma";
-	doc.activeLayer = chromaLayer;
-
-	// Strong, linear chroma ramp for predictable behavior.
-	var targetA = preflashColor.lab.a;
-	var targetB = preflashColor.lab.b;
-	var deltaA = Math.round(targetA * chromaScale);
-	var deltaB = Math.round(targetB * chromaScale);
-
-	function shiftedCurve(delta) {
-		return [
-			[0, clamp255(0 + delta)],
-			[128, clamp255(128 + delta)],
-			[255, clamp255(255 + delta)]
-		];
-	}
-
-	var originalLabChannels = doc.activeChannels;
-	doc.selection.load(doc.channels.getByName("Whole Mask"), SelectionType.REPLACE);
-
-	// Shift a channel
-	doc.activeChannels = [doc.channels.getByName("a")];
-	chromaLayer.adjustCurves(shiftedCurve(deltaA));
-
-	// Shift b channel
-	doc.activeChannels = [doc.channels.getByName("b")];
-	chromaLayer.adjustCurves(shiftedCurve(deltaB));
-
-	// Keep chroma change strictly inside Whole Mask by removing layer pixels outside the mask.
-	doc.selection.invert();
-	doc.activeChannels = originalLabChannels;
-	doc.selection.clear();
-	doc.activeChannels = originalLabChannels;
-	doc.selection.deselect();
-	chromaLayer.merge();
-	imagelayer = doc.activeLayer;
+	applyChroma(tone.chromaScale);
 
 	if (preserve_blackpoint) {
 		actualPostLevelBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
@@ -897,24 +927,7 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 			var outBlack = needBlack ? restoredBp : 0;
 			var outWhite = needWhite ? restoredWp : 255;
 			// Choose the mid input value to preserve: use post-compensation mid (p128)
-			var midIn = p128;
-			var gamma = 1.0;
-			// Only compute gamma when inputs are distinct and mid lies inside the input range
-			if (inWhite > inBlack) {
-				var t = (midIn - inBlack) / (inWhite - inBlack);
-				// desired normalized output for mid should equal midIn mapped into output range
-				var tprime = (midIn - outBlack) / (outWhite - outBlack);
-				// numeric safety
-				if (t > 0 && t < 1 && tprime > 0 && tprime < 1) {
-					// solve tprime = t^(1/gamma)  =>  gamma = ln(t) / ln(tprime)
-					try {
-						gamma = Math.log(t) / Math.log(tprime);
-						// clamp gamma to reasonable photographic bounds
-						if (!isFinite(gamma) || gamma <= 0) gamma = 1.0;
-						gamma = Math.max(0.25, Math.min(4.0, gamma));
-					} catch (e) { gamma = 1.0; }
-				}
-			}
+			var gamma = solveLevelsGamma(tone.p128, inBlack, inWhite, outBlack, outWhite);
 			// Apply a single Levels pass mapping the measured endpoints to the restored endpoints
 			imagelayer.adjustLevels(inBlack, inWhite, gamma, outBlack, outWhite);
 		} catch (e) {
@@ -932,19 +945,7 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 		if (targetWhite <= targetBlack) targetWhite = Math.min(255, targetBlack + 1);
 		doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
 		try {
-			var endpointGamma = 1.0;
-			var midInFinal = 128;
-			if (targetWhite > targetBlack) {
-				var tFinal = midInFinal / 255.0;
-				var tPrimeFinal = (midInFinal - targetBlack) / (targetWhite - targetBlack);
-				if (tFinal > 0 && tFinal < 1 && tPrimeFinal > 0 && tPrimeFinal < 1) {
-					try {
-						endpointGamma = Math.log(tFinal) / Math.log(tPrimeFinal);
-						if (!isFinite(endpointGamma) || endpointGamma <= 0) endpointGamma = 1.0;
-						endpointGamma = Math.max(0.25, Math.min(4.0, endpointGamma));
-					} catch (e) { endpointGamma = 1.0; }
-				}
-			}
+			var endpointGamma = solveLevelsGamma(128, 0, 255, targetBlack, targetWhite);
 			imagelayer.adjustLevels(0, 255, endpointGamma, targetBlack, targetWhite);
 		} catch (e) {}
 		doc.activeChannels = savedChannels;
