@@ -16,10 +16,10 @@ var pre_flash_g = 96;
 var pre_flash_b = 44;
 var pre_flash_strength = 50;
 var blur_radius = 3;
-var auto_adjust_preflash = false;
-var preserve_whitepoint = false;
-var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
-var preserve_blackpoint = false;
+var auto_adjust_preflash = true;
+var preserve_whitepoint = true;
+var whitepoint_restore_strength = 20; // 1–100: percentage to restore the original white point
+var preserve_blackpoint = true;
 var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var desaturation = false;
 
@@ -781,12 +781,15 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 
 	// Lift blackpoint with increasing preflash strength so stronger preflash
 	// raises the toe while still allowing print-like compression behavior.
+	// When preserve_blackpoint is enabled, scale this lift down according to
+	// blackpoint_restore_strength (e.g. 70% preserve => 30% of lift remains).
 	var blackLiftNorm = Math.pow(strengthNorm, 1.05);
 	var blackLiftAmt = Math.round(preflash_black_lift_max * blackLiftNorm * (0.85 + 0.15 * wholeMaskCoverage));
-	p0 = clamp255(p0 + Math.round(blackLiftAmt * 1.25));
-	p32 = clamp255(p32 + Math.round(blackLiftAmt * 1.05));
-	p64 = clamp255(p64 + Math.round(blackLiftAmt * 0.75));
-	p128 = clamp255(p128 + Math.round(blackLiftAmt * 0.35));
+	var blackLiftFactor = preserve_blackpoint ? (1 - (blackpoint_restore_strength / 100)) : 1;
+	p0 = clamp255(p0 + Math.round(blackLiftAmt * 1.25 * blackLiftFactor));
+	p32 = clamp255(p32 + Math.round(blackLiftAmt * 1.05 * blackLiftFactor));
+	p64 = clamp255(p64 + Math.round(blackLiftAmt * 0.75 * blackLiftFactor));
+	p128 = clamp255(p128 + Math.round(blackLiftAmt * 0.35 * blackLiftFactor));
 
 	// Keep anchors monotonic.
 	p32 = Math.max(p0, p32);
@@ -830,9 +833,10 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 	var c64 = clamp255(64 - Math.round(compMid * 0.25));
 	var c128 = clamp255(128 - Math.round(compMid * 1.00));
 	var c160 = clamp255(160 - Math.round(compMid * 1.15));
-	var c192 = clamp255(192 - Math.round(compHigh * 0.80));
-	var c224 = clamp255(224 - Math.round(compHigh * 1.05));
-	var c255 = clamp255(255 - Math.round(compHigh * 1.10));
+	var whiteCompFactor = preserve_whitepoint ? (1 - (whitepoint_restore_strength / 100)) : 1;
+	var c192 = clamp255(192 - Math.round(compHigh * 0.80 * whiteCompFactor));
+	var c224 = clamp255(224 - Math.round(compHigh * 1.05 * whiteCompFactor));
+	var c255 = clamp255(255 - Math.round(compHigh * 1.10 * whiteCompFactor));
 	c32 = Math.max(c0, c32);
 	c64 = Math.max(c32, c64);
 	c128 = Math.max(c64, c128);
