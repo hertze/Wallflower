@@ -19,7 +19,7 @@ var blur_radius = 3;
 var auto_adjust_preflash = true;
 var preserve_whitepoint = false;
 var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
-var preserve_blackpoint = true;
+var preserve_blackpoint = false;
 var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var desaturation = true;
 
@@ -61,6 +61,8 @@ var preflash_damp_max = 0.6;
 var preflash_blackcomp_max = 40;
 var preflash_mid_blend = 0.7;
 var preflash_min_factor = 0.35;
+var preflash_lift_max = 48; // max Lightness lift in upper tones at strength=100
+var preflash_black_lift_max = 18; // max blackpoint lift at strength=100
 
 // Black / white point detection and restoration (how to think in photo terms)
 // - `blackpoint_threshold_fraction`: fraction of image pixels used to decide
@@ -741,6 +743,187 @@ function softenImage(layer, radius) {
 	}
 }
 
+function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, paperResponseCoverage) {
+	if (auto_adjust_preflash) {
+		pre_flash_strength = autoAdjustPreflashStrength(pre_flash_strength);
+	}
+	if (pre_flash_strength <= 0) {
+		return;
+	}
+
+	doc.changeMode(ChangeMode.LAB);
+	var savedChannels = doc.activeChannels;
+
+	// Step 1: pure masked Lightness lift in Lab (no compensatory darkening curve).
+	var strengthNorm = pre_flash_strength / 100;
+	function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
+	var liftAmt = Math.round(preflash_lift_max * strengthNorm * (0.75 + 0.25 * wholeMaskCoverage));
+
+	var p0 = 0;
+	var p32 = clamp255(32 + Math.round(liftAmt * 0.20));
+	var p64 = clamp255(64 + Math.round(liftAmt * 0.40));
+	var p128 = clamp255(128 + Math.round(liftAmt * 0.70));
+	var p160 = clamp255(160 + Math.round(liftAmt * 0.88));
+	var p192 = clamp255(192 + Math.round(liftAmt * 1.00));
+	var p224 = clamp255(224 + Math.round(liftAmt * 1.05));
+	var p255 = 255;
+
+	// Reproduce the old SCREEN-like print behavior at higher strengths by
+	// compressing the toe (deeper blacks / less shadow separation).
+	// The crush ramps in only for larger strengths.
+	var crushNorm = Math.max(0, Math.min(1, (strengthNorm - 0.45) / 0.55));
+	var crushAmt = Math.round(44 * crushNorm * crushNorm * (0.85 + 0.15 * paperResponseCoverage));
+	p32 = clamp255(p32 - Math.round(crushAmt * 0.95));
+	p64 = clamp255(p64 - Math.round(crushAmt * 0.70));
+	p128 = clamp255(p128 - Math.round(crushAmt * 0.25));
+
+	// Lift blackpoint with increasing preflash strength so stronger preflash
+	// raises the toe while still allowing print-like compression behavior.
+	var blackLiftNorm = Math.pow(strengthNorm, 1.25);
+	var blackLiftAmt = Math.round(preflash_black_lift_max * blackLiftNorm * (0.85 + 0.15 * wholeMaskCoverage));
+	p0 = clamp255(p0 + Math.round(blackLiftAmt * 1.00));
+	p32 = clamp255(p32 + Math.round(blackLiftAmt * 0.90));
+	p64 = clamp255(p64 + Math.round(blackLiftAmt * 0.55));
+
+	// Keep anchors monotonic.
+	p32 = Math.max(p0, p32);
+	p64 = Math.max(p32, p64);
+	p128 = Math.max(p64, p128);
+	p160 = Math.max(p128, p160);
+	p192 = Math.max(p160, p192);
+	p224 = Math.max(p192, p224);
+	p255 = Math.max(p224, p255);
+	// Step 1a: apply the Lightness curve only inside the Whole Mask.
+	var curvePoints = [
+		[0, p0],
+		[32, p32],
+		[64, p64],
+		[128, p128],
+		[160, p160],
+		[192, p192],
+		[224, p224],
+		[255, p255]
+	];
+	var lightnessLayer = imagelayer.duplicate();
+	lightnessLayer.name = "Preflash Lightness";
+	doc.activeLayer = lightnessLayer;
+	doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+	lightnessLayer.adjustCurves(curvePoints);
+	doc.activeChannels = savedChannels;
+	doc.selection.load(doc.channels.getByName("Whole Mask"));
+	doc.selection.invert();
+	doc.selection.clear();
+	doc.selection.deselect();
+	lightnessLayer.merge();
+	imagelayer = doc.activeLayer;
+
+	// Step 2: restore black and/or white point in a single curve pass.
+	var needBlack = false, needWhite = false;
+	var actualPostLevelBlack, bp, restoredBp;
+	var actualPostLevelWhite, wp, restoredWp;
+
+	doc.activeChannels = savedChannels;
+
+	if (preserve_blackpoint) {
+		actualPostLevelBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
+		bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
+		if (actualPostLevelBlack > bp + blackpoint_tolerance) {
+			restoredBp = Math.round(actualPostLevelBlack - (actualPostLevelBlack - bp) * (blackpoint_restore_strength / 100));
+			needBlack = true;
+		}
+	}
+	if (preserve_whitepoint) {
+		actualPostLevelWhite = Math.max(0, Math.min(255, Math.round(computeImageWhitePoint(whitepoint_threshold_fraction))));
+		wp = Math.max(0, Math.min(255, Math.round(initialWhitePoint || 255)));
+		if (actualPostLevelWhite < wp - whitepoint_tolerance) {
+			restoredWp = Math.round(actualPostLevelWhite + (wp - actualPostLevelWhite) * (whitepoint_restore_strength / 100));
+			needWhite = true;
+		}
+	}
+
+	if (needBlack || needWhite) {
+		doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
+
+		// Use Levels instead of curves for robust black/white restoration
+		// Levels parameters: inputShadow, inputGamma, inputHighlight, outputShadow, outputHighlight
+		try {
+			// Prepare Levels parameters depending on which endpoints we need to restore
+			var inBlack = needBlack ? actualPostLevelBlack : 0;
+			var inWhite = needWhite ? actualPostLevelWhite : 255;
+			var outBlack = needBlack ? restoredBp : 0;
+			var outWhite = needWhite ? restoredWp : 255;
+			// Choose the mid input value to preserve: use post-compensation mid (p128)
+			var midIn = p128;
+			var gamma = 1.0;
+			// Only compute gamma when inputs are distinct and mid lies inside the input range
+			if (inWhite > inBlack) {
+				var t = (midIn - inBlack) / (inWhite - inBlack);
+				// desired normalized output for mid should equal midIn mapped into output range
+				var tprime = (midIn - outBlack) / (outWhite - outBlack);
+				// numeric safety
+				if (t > 0 && t < 1 && tprime > 0 && tprime < 1) {
+					// solve tprime = t^(1/gamma)  =>  gamma = ln(t) / ln(tprime)
+					try {
+						gamma = Math.log(t) / Math.log(tprime);
+						// clamp gamma to reasonable photographic bounds
+						if (!isFinite(gamma) || gamma <= 0) gamma = 1.0;
+						gamma = Math.max(0.25, Math.min(4.0, gamma));
+					} catch (e) { gamma = 1.0; }
+				}
+			}
+			// Apply a single Levels pass mapping the measured endpoints to the restored endpoints
+			imagelayer.adjustLevels(inBlack, inWhite, gamma, outBlack, outWhite);
+		} catch (e) {
+			// fall back silently if adjustLevels is unsupported in this context
+		}
+
+		doc.activeChannels = savedChannels;
+	}
+
+	// Step 3: add chroma in Lab safely by shifting a/b channels (relative move from current values).
+	// This avoids hue inversion from absolute fills and keeps tonal work isolated in Lightness.
+	var chromaLayer = imagelayer.duplicate();
+	chromaLayer.name = "Preflash Chroma";
+	doc.activeLayer = chromaLayer;
+
+	var chromaScale = 0.28; // lower by design: a/b shifts are very sensitive
+	var targetA = preflashColor.lab.a;
+	var targetB = preflashColor.lab.b;
+	var deltaA = Math.round(targetA * strengthNorm * chromaScale);
+	var deltaB = Math.round(targetB * strengthNorm * chromaScale);
+
+	function shiftedCurve(delta) {
+		return [
+			[0, clamp255(0 + delta)],
+			[128, clamp255(128 + delta)],
+			[255, clamp255(255 + delta)]
+		];
+	}
+
+	var originalLabChannels = doc.activeChannels;
+	doc.selection.load(doc.channels.getByName("Whole Mask"));
+	doc.selection.invert();
+
+	// Shift a channel
+	doc.activeChannels = [doc.channels.getByName("a")];
+	chromaLayer.adjustCurves(shiftedCurve(deltaA));
+
+	// Shift b channel
+	doc.activeChannels = [doc.channels.getByName("b")];
+	chromaLayer.adjustCurves(shiftedCurve(deltaB));
+
+	// Keep chroma change inside Whole Mask
+	doc.activeChannels = originalLabChannels;
+	doc.selection.clear();
+	doc.selection.deselect();
+	chromaLayer.merge();
+	imagelayer = doc.activeLayer;
+
+	// Convert back to RGB for the remaining pipeline stages.
+	doc.changeMode(ChangeMode.RGB);
+
+}
+
 
 // Initial properties, settings and calculations
 
@@ -812,152 +995,7 @@ try {
 		} catch (e) { initialBlackPoint = 0; initialWhitePoint = 255; }
 
 		// Preflash
-		if (auto_adjust_preflash) {
-			pre_flash_strength = autoAdjustPreflashStrength(pre_flash_strength);
-		}
-		if (pre_flash_strength > 0) {
-			var preflashLayer = doc.artLayers.add();
-			preflashLayer.name = "Preflash";
-			preflashLayer.blendMode = BlendMode.SCREEN;
-			preflashLayer.opacity = pre_flash_strength;
-			
-			doc.selection.load(doc.channels.getByName("Whole Mask"));
-			doc.selection.fill(preflashColor);
-			doc.selection.deselect();
-			preflashLayer.merge();
-
-			doc.changeMode(ChangeMode.LAB);
-			var savedChannels = doc.activeChannels;
-			doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
-
-			// Model compensation as a toe/shoulder response driven by exposure strength
-			// and the precomputed mask coverage rather than global mean brightness.
-			var strengthNorm = pre_flash_strength / 100;
-			var damp = Math.min(preflash_damp_max, strengthNorm * preflash_damp_max);
-			var midComp = Math.round((28 + 46 * paperResponseCoverage) * strengthNorm * (0.9 + damp * 0.75));
-			var shoulderComp = Math.round((18 + 34 * wholeMaskCoverage) * strengthNorm * (0.9 + (1 - preflash_mid_blend) * 0.45));
-			function clamp255(v) { return Math.max(0, Math.min(255, Math.round(v))); }
-			function gentle(v) {
-				var t = v / 255.0; // 0..1
-				var toeProtect = Math.pow(1 - t, 2.0);
-				var midWeight = 4 * t * (1 - t);
-				var extra = midComp * (0.7 * midWeight + 0.35 * t) * (1 - 0.84 * toeProtect);
-				return clamp255(v - extra);
-			}
-			function comp(v) {
-				// Add extra rollback in the shoulder so highlight contrast does not build up.
-				var base = gentle(v);
-				var t = v / 255.0;
-				var extra = Math.round(shoulderComp * Math.pow(t, 2.0));
-				return clamp255(base - extra);
-			}
-			// Blend lower mids back toward the gentler damped() result so the toe stays open.
-			var midBlend = preflash_mid_blend; // 0..1 where 1 = fully damped (less change), 0 = fully comp (more change)
-			var overallBias = Math.round((6 + 14 * paperResponseCoverage) * strengthNorm);
-			var p0 = comp(0);
-			var p32 = comp(32);
-			var p64 = Math.round(comp(64) * (1 - midBlend) + gentle(64) * midBlend);
-			var p128 = Math.round(comp(128) * (1 - midBlend) + gentle(128) * midBlend);
-			var p160Raw = comp(160);
-			var p160 = Math.min(p160Raw, p128 + (160 - 128));
-			var p192Raw = comp(192);
-			var p192 = Math.min(p192Raw, p160 + (192 - 160));
-			// Keep the upper shoulder on the same compensation model so very bright
-			// highlights are lowered at least as much as lower highlights.
-			var p224Raw = comp(224);
-			var p224 = Math.max(p192, Math.min(p224Raw, p192 + (224 - 192)));
-			var p255Raw = comp(255);
-			var p255 = Math.max(p224, Math.min(p255Raw, p224 + (255 - 224)));
-			// Apply a small global darkening bias that scales with preflash strength
-			// while preserving the existing curve shape and anchor ordering.
-			var upperBiasScale = 1 + (0.6 * strengthNorm);
-			p0 = clamp255(p0 - Math.round(overallBias * 0.15));
-			p32 = Math.max(p0, clamp255(p32 - Math.round(overallBias * 0.3)));
-			p64 = Math.max(p32, clamp255(p64 - Math.round(overallBias * 0.6)));
-			p128 = Math.max(p64, clamp255(p128 - Math.round(overallBias * (1.0 * upperBiasScale))));
-			p160 = Math.max(p128, clamp255(p160 - Math.round(overallBias * (1.15 * upperBiasScale))));
-			p192 = Math.max(p160, clamp255(p192 - Math.round(overallBias * (1.3 * upperBiasScale))));
-			p224 = Math.max(p192, clamp255(p224 - Math.round(overallBias * (1.4 * upperBiasScale))));
-			p255 = Math.max(p224, clamp255(p255 - Math.round(overallBias * (1.5 * upperBiasScale))));
-			// Step 1: preflash compensation curve - pure tone correction, no blackpoint logic.
-			var curvePoints = [
-				[0, p0],
-				[32, p32],
-				[64, p64],
-				[128, p128],
-				[160, p160],
-				[192, p192],
-				[224, p224],
-				[255, p255]
-			];
-			// Apply in Lab/Lightness only - colour-neutral, no hue/saturation shift.
-
-			imagelayer.adjustCurves(curvePoints);
-
-			// Step 2: restore black and/or white point in a single curve pass.
-			var needBlack = false, needWhite = false;
-			var actualPostLevelBlack, bp, restoredBp;
-			var actualPostLevelWhite, wp, restoredWp;
-
-			doc.activeChannels = savedChannels;
-
-			if (preserve_blackpoint) {
-				actualPostLevelBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
-				bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
-				if (actualPostLevelBlack > bp + blackpoint_tolerance) {
-					restoredBp = Math.round(actualPostLevelBlack - (actualPostLevelBlack - bp) * (blackpoint_restore_strength / 100));
-					needBlack = true;
-				}
-			}
-			if (preserve_whitepoint) {
-				actualPostLevelWhite = Math.max(0, Math.min(255, Math.round(computeImageWhitePoint(whitepoint_threshold_fraction))));
-				wp = Math.max(0, Math.min(255, Math.round(initialWhitePoint || 255)));
-				if (actualPostLevelWhite < wp - whitepoint_tolerance) {
-					restoredWp = Math.round(actualPostLevelWhite + (wp - actualPostLevelWhite) * (whitepoint_restore_strength / 100));
-					needWhite = true;
-				}
-			}
-
-			if (needBlack || needWhite) {
-				doc.activeChannels = [doc.channels.getByName(lightness_channel_name)];
-
-					// Use Levels instead of curves for robust black/white restoration
-					// Levels parameters: inputShadow, inputGamma, inputHighlight, outputShadow, outputHighlight
-					try {
-						// Prepare Levels parameters depending on which endpoints we need to restore
-						var inBlack = needBlack ? actualPostLevelBlack : 0;
-						var inWhite = needWhite ? actualPostLevelWhite : 255;
-						var outBlack = needBlack ? restoredBp : 0;
-						var outWhite = needWhite ? restoredWp : 255;
-						// Choose the mid input value to preserve: use post-compensation mid (p128)
-						var midIn = p128;
-						var gamma = 1.0;
-						// Only compute gamma when inputs are distinct and mid lies inside the input range
-						if (inWhite > inBlack) {
-							var t = (midIn - inBlack) / (inWhite - inBlack);
-							// desired normalized output for mid should equal midIn mapped into output range
-							var tprime = (midIn - outBlack) / (outWhite - outBlack);
-							// numeric safety
-							if (t > 0 && t < 1 && tprime > 0 && tprime < 1) {
-								// solve tprime = t^(1/gamma)  =>  gamma = ln(t) / ln(tprime)
-								try {
-									gamma = Math.log(t) / Math.log(tprime);
-									// clamp gamma to reasonable photographic bounds
-									if (!isFinite(gamma) || gamma <= 0) gamma = 1.0;
-									gamma = Math.max(0.25, Math.min(4.0, gamma));
-								} catch (e) { gamma = 1.0; }
-							}
-						}
-						// Apply a single Levels pass mapping the measured endpoints to the restored endpoints
-						imagelayer.adjustLevels(inBlack, inWhite, gamma, outBlack, outWhite);
-					} catch (e) {
-						// fall back silently if adjustLevels is unsupported in this context
-					}
-
-				doc.activeChannels = savedChannels;
-			}
-			doc.changeMode(ChangeMode.RGB);
-		}
+		applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, paperResponseCoverage);
 
 		// Lower micro contrast
 		var microContratLayer = imagelayer.duplicate();
