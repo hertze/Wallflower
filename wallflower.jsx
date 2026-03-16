@@ -860,6 +860,8 @@ try {
 			var p192 = comp(192);
 			// Lower the 255 anchor by the same amount as p192 so highlight contrast does not increase.
 			var p255 = Math.max(p192, Math.min(255, p192 + (255 - 192)));
+			// Constrain the shoulder spline with an intermediate anchor on the same linear falloff.
+			var p224 = Math.max(p192, Math.min(p255, p192 + (224 - 192)));
 			// Step 1: preflash compensation curve - pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
@@ -867,6 +869,7 @@ try {
 				[64, p64],
 				[128, p128],
 				[192, p192],
+				[224, p224],
 				[255, p255]
 			];
 			// Apply in Lab/Lightness only - colour-neutral, no hue/saturation shift.
