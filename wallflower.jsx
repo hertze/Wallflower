@@ -853,6 +853,7 @@ try {
 			}
 			// Blend lower mids back toward the gentler damped() result so the toe stays open.
 			var midBlend = preflash_mid_blend; // 0..1 where 1 = fully damped (less change), 0 = fully comp (more change)
+			var overallBias = Math.round((4 + 12 * paperResponseCoverage) * strengthNorm);
 			var p0 = comp(0);
 			var p32 = comp(32);
 			var p64 = Math.round(comp(64) * (1 - midBlend) + gentle(64) * midBlend);
@@ -867,6 +868,16 @@ try {
 			var p224 = Math.max(p192, Math.min(p224Raw, p192 + (224 - 192)));
 			var p255Raw = comp(255);
 			var p255 = Math.max(p224, Math.min(p255Raw, p224 + (255 - 224)));
+			// Apply a small global darkening bias that scales with preflash strength
+			// while preserving the existing curve shape and anchor ordering.
+			p0 = clamp255(p0 - Math.round(overallBias * 0.15));
+			p32 = Math.max(p0, clamp255(p32 - Math.round(overallBias * 0.3)));
+			p64 = Math.max(p32, clamp255(p64 - Math.round(overallBias * 0.45)));
+			p128 = Math.max(p64, clamp255(p128 - Math.round(overallBias * 0.75)));
+			p160 = Math.max(p128, clamp255(p160 - Math.round(overallBias * 0.9)));
+			p192 = Math.max(p160, clamp255(p192 - overallBias));
+			p224 = Math.max(p192, clamp255(p224 - overallBias));
+			p255 = Math.max(p224, clamp255(p255 - overallBias));
 			// Step 1: preflash compensation curve - pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
