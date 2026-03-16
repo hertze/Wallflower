@@ -762,7 +762,7 @@ try {
 
 		// Create luminance masks (pass scaled blur radius)
 		// Pass an explicit gamma (third argument) for Whole and Highlight masks to bias midtones when needed
-		createLuminanceMasks(0, 255, 0.85, "Whole Mask", doc_scale * blur_radius);
+		createLuminanceMasks(0, 255, 1.0, "Whole Mask", doc_scale * blur_radius);
 		createLuminanceMasks(192, 255, 0.8, "Highlight Mask", 0);
 
 		// Check initial black/white points in Lab before preflash modifies the image.
