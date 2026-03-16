@@ -62,25 +62,24 @@ var preflash_min_factor = 0.35;
 // - `blackpoint_tolerance`: minimum histogram-bin difference (in L bins)
 //   required before we attempt to restore the black point. Prevents tiny
 //   measurement noise from triggering a restore. ~2 is a good default.
-// - `blackpoint_restore_strength` (0..1): how much to move blacks back
-//   toward their original position after compensation — 0 leaves them alone,
-//   1 fully restores the original black point. Use intermediate values to
-//   soften the correction and avoid midtone side-effects.
+// - `blackpoint_restore_strength` (1–100): percentage to restore blacks back
+//   toward their original position after compensation. Lower values give
+//   softer corrections with fewer midtone side-effects.
 // - `whitepoint_threshold_fraction`: similar to black threshold but scans
 //   from the top of the histogram. Keep it tight (small) so specular highlights
 //   don't dominate the measurement; it helps recover highlight roll-off rather
 //   than specular clipping.
 // - `whitepoint_tolerance`: minimum bin gap to require before restoring
 //   highlights. Prevents unnecessary tiny shifts.
-// - `whitepoint_restore_strength` (0..1): fraction of the measured difference
-//   to restore. Use lower values when you want only subtle highlight recovery
-//   (avoid flattening the highlight shoulder).
+// - `whitepoint_restore_strength` (1–100): percentage to restore whites back
+//   toward their original position. Lower values give subtler highlight
+//   recovery.
 var blackpoint_threshold_fraction = 0.003;  // fraction of pixels to consider 'significant' (5%)
 var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this brighter than post-curve
-var blackpoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original black point
+var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var whitepoint_threshold_fraction = 0.003; // tight (0.1%) - finds the actual top-end occupied bin, not clipped specular
 var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
-var whitepoint_restore_strength = 0.7; // 0 = no restoration, 1 = full restoration back to original white point
+var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
 
 var save = false;
 		
@@ -107,6 +106,8 @@ var save = false;
 	/saveblackpoint [(SaveBlackPoint) /boolean]
 	/desaturation [(Desaturation) /boolean]
 	/desatamount [(DesatAmount) /integer]
+	/blackrestoreamt [(BlackRestoreAmt) /integer]
+	/whiterestoreamt [(WhiteRestoreAmt) /integer]
 		>>]
 			>>
 	>> ]]></terminology>
@@ -115,7 +116,7 @@ var save = false;
 */
 
 
-function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveWhiteParam, desatParam, desatAmountParam, runmode) {
+function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveWhiteParam, desatParam, desatAmountParam, blackRestoreParam, whiteRestoreParam, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
 	dialog.text = "Wallflower";
@@ -145,33 +146,59 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 		dialog.autoadjust.value = auto_adjust_preflash;
 	}
 
-	// Keep White Point checkbox
-	dialog.savewhite = dialog.add("checkbox", undefined, "Preserve White Point");
+	// Keep White Point checkbox + restore strength field
+	var savewhiteGroup = dialog.add("group");
+	savewhiteGroup.orientation = "row";
+	savewhiteGroup.spacing = 2;
+	dialog.savewhite = savewhiteGroup.add("checkbox", undefined, "Preserve White Point at");
+	dialog.whiteRestoreAmount = savewhiteGroup.add("edittext", undefined, undefined, { name: "whiteRestoreAmount" });
+	dialog.whiteRestoreAmount.characters = 4;
+	try { dialog.whiteRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
+	var whitePctLabel = savewhiteGroup.add("statictext", undefined, "%");
+	try { whitePctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
 	if (saveWhiteParam !== undefined) {
 		dialog.savewhite.value = (saveWhiteParam.toLowerCase() === "true");
 	} else {
 		dialog.savewhite.value = save_whitepoint;
 	}
+	if (whiteRestoreParam !== undefined) {
+		dialog.whiteRestoreAmount.text = whiteRestoreParam.toString();
+	} else {
+		dialog.whiteRestoreAmount.text = whitepoint_restore_strength.toString();
+	}
 
-	// Save original blackpoint checkbox (placed after auto-adjust)
-	// This controls whether we detect & bake the original blackpoint.
-	dialog.saveblack = dialog.add("checkbox", undefined, "Preserve Black Point");
+	// Save original blackpoint checkbox + restore strength field
+	var saveblackGroup = dialog.add("group");
+	saveblackGroup.orientation = "row";
+	saveblackGroup.spacing = 2;
+	dialog.saveblack = saveblackGroup.add("checkbox", undefined, "Preserve Black Point at");
+	dialog.blackRestoreAmount = saveblackGroup.add("edittext", undefined, undefined, { name: "blackRestoreAmount" });
+	dialog.blackRestoreAmount.characters = 4;
+	try { dialog.blackRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
+	var blackPctLabel = saveblackGroup.add("statictext", undefined, "%");
+	try { blackPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
 	if (saveBlackParam !== undefined) {
 		dialog.saveblack.value = (saveBlackParam.toLowerCase() === "true");
 	} else {
 		dialog.saveblack.value = save_blackpoint;
 	}
+	if (blackRestoreParam !== undefined) {
+		dialog.blackRestoreAmount.text = blackRestoreParam.toString();
+	} else {
+		dialog.blackRestoreAmount.text = blackpoint_restore_strength.toString();
+	}
 
 	// Desaturation checkbox + amount (placed before Save checkbox)
 	var desatGroup = dialog.add("group");
 	desatGroup.orientation = "row";
-	dialog.desaturation = desatGroup.add("checkbox", undefined, "Reduce Preflash Saturation");
+	desatGroup.spacing = 2;
+	dialog.desaturation = desatGroup.add("checkbox", undefined, "Reduce Preflash Saturation at");
 	dialog.desatAmount = desatGroup.add("edittext", undefined, undefined, { name: "desatAmount" });
 	dialog.desatAmount.characters = 4;
 	// remove extra padding around the small numeric field
 	try { dialog.desatAmount.margins = [0, 0, 0, 0]; } catch(e) {}
 	var desatPctLabel = desatGroup.add("statictext", undefined, "%");
-	try { desatPctLabel.margins = [4, 0, 0, 0]; } catch(e) {}
+	try { desatPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
 
 	if (desatParam !== undefined) {
 		dialog.desaturation.value = (desatParam.toLowerCase() === "true");
@@ -202,7 +229,9 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 		desaturation = dialog.desaturation.value.toString();
 		save_whitepoint = dialog.savewhite.value.toString();
 		save_blackpoint = dialog.saveblack.value.toString();
-		desaturation_amount_setting = parseInt(dialog.desatAmount.text) || desaturation_amount_setting;
+		var _ds = parseInt(dialog.desatAmount.text); if (!isNaN(_ds)) desaturation_amount_setting = _ds;
+		var _bp = parseInt(dialog.blackRestoreAmount.text); if (!isNaN(_bp)) blackpoint_restore_strength = _bp;
+		var _wp = parseInt(dialog.whiteRestoreAmount.text); if (!isNaN(_wp)) whitepoint_restore_strength = _wp;
 		dialog.close();
 	};
 	
@@ -226,7 +255,9 @@ function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveW
 		"savewhitepoint": save_whitepoint,
 		"saveblackpoint": save_blackpoint,
 		"desaturation": desaturation,
-		"desatamount": desaturation_amount_setting
+		"desatamount": desaturation_amount_setting,
+		"blackrestoreamt": blackpoint_restore_strength,
+		"whiterestoreamt": whitepoint_restore_strength
 	};
 }
 
@@ -256,6 +287,12 @@ function getRecipe() {
 				if (result.desatamount !== undefined && result.desatamount !== null) {
 					d.putInteger(stringIDToTypeID('desatamount'), result.desatamount);
 				}
+				if (result.blackrestoreamt !== undefined && result.blackrestoreamt !== null) {
+					d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
+				}
+				if (result.whiterestoreamt !== undefined && result.whiterestoreamt !== null) {
+					d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
+				}
 			app.playbackParameters = d;        
 			return result;
 		}
@@ -268,15 +305,19 @@ function getRecipe() {
 		var savewhite = null;
 		var desat = null;
 		var desatamount = null;
+		var blackrestoreamt = null;
+		var whiterestoreamt = null;
 		try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(e) { autoadjust = undefined; }
 		try { saveblack = app.playbackParameters.getString(stringIDToTypeID('saveblackpoint')); } catch(e) { saveblack = undefined; }
 		try { savewhite = app.playbackParameters.getString(stringIDToTypeID('savewhitepoint')); } catch(e) { savewhite = undefined; }
 		try { desat = app.playbackParameters.getString(stringIDToTypeID('desaturation')); } catch(e) { desat = undefined; }
 		try { desatamount = app.playbackParameters.getInteger(stringIDToTypeID('desatamount')); } catch(e) { desatamount = undefined; }
+		try { blackrestoreamt = app.playbackParameters.getInteger(stringIDToTypeID('blackrestoreamt')); } catch(e) { blackrestoreamt = undefined; }
+		try { whiterestoreamt = app.playbackParameters.getInteger(stringIDToTypeID('whiterestoreamt')); } catch(e) { whiterestoreamt = undefined; }
 		
 		if (app.playbackDisplayDialogs == DialogModes.ALL) {
 			// user run action in dialog mode (edit action step)
-				var result = displayDialog(recipe, savestatus, autoadjust, saveblack, savewhite, desat, desatamount, "edit");
+				var result = displayDialog(recipe, savestatus, autoadjust, saveblack, savewhite, desat, desatamount, blackrestoreamt, whiterestoreamt, "edit");
 			if (!result.recipe || result.recipe == "") { isCancelled = true; return } else {
 				var d = new ActionDescriptor;
 				d.putString(stringIDToTypeID('recipe'), result.recipe);
@@ -286,6 +327,8 @@ function getRecipe() {
 					d.putString(stringIDToTypeID('saveblackpoint'), result.saveblackpoint);
 					d.putString(stringIDToTypeID('desaturation'), result.desaturation);
 					d.putInteger(stringIDToTypeID('desatamount'), result.desatamount);
+					d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
+					d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
 				app.playbackParameters = d;
 			}
 			executeScript = false;
@@ -300,7 +343,9 @@ function getRecipe() {
 				"savewhitepoint": savewhite,
 				"saveblackpoint": saveblack,
 				"desaturation": desat,
-				"desatamount": desatamount
+			"desatamount": desatamount,
+			"blackrestoreamt": blackrestoreamt,
+			"whiterestoreamt": whiterestoreamt
 			};
 		}
 	}
@@ -344,7 +389,14 @@ function processRecipe(runtimesettings) {
 			}
 			// Apply desaturation amount (percent) from dialog/playbackParameters if present
 			if (runtimesettings.desatamount !== undefined && runtimesettings.desatamount !== null) {
-				desaturation_amount_setting = parseInt(runtimesettings.desatamount) || desaturation_amount_setting;
+				var _ds = parseInt(runtimesettings.desatamount); if (!isNaN(_ds)) desaturation_amount_setting = _ds;
+			}
+			// Apply restore strength percentages from dialog/playbackParameters if present
+			if (runtimesettings.blackrestoreamt !== undefined && runtimesettings.blackrestoreamt !== null) {
+					var _bp = parseInt(runtimesettings.blackrestoreamt); if (!isNaN(_bp)) blackpoint_restore_strength = _bp;
+			}
+			if (runtimesettings.whiterestoreamt !== undefined && runtimesettings.whiterestoreamt !== null) {
+				var _wp = parseInt(runtimesettings.whiterestoreamt); if (!isNaN(_wp)) whitepoint_restore_strength = _wp;
 			}
 	} else {
 		executeScript = false;
@@ -791,7 +843,7 @@ try {
 				actualPostLevelBlack = Math.max(0, Math.min(255, Math.round(computeImageBlackPoint())));
 				bp = Math.max(0, Math.min(255, Math.round(initialBlackPoint || 0)));
 				if (actualPostLevelBlack > bp + blackpoint_tolerance) {
-					restoredBp = Math.round(actualPostLevelBlack - (actualPostLevelBlack - bp) * blackpoint_restore_strength);
+					restoredBp = Math.round(actualPostLevelBlack - (actualPostLevelBlack - bp) * (blackpoint_restore_strength / 100));
 					needBlack = true;
 				}
 			}
@@ -799,7 +851,7 @@ try {
 				actualPostLevelWhite = Math.max(0, Math.min(255, Math.round(computeImageWhitePoint(whitepoint_threshold_fraction))));
 				wp = Math.max(0, Math.min(255, Math.round(initialWhitePoint || 255)));
 				if (actualPostLevelWhite < wp - whitepoint_tolerance) {
-					restoredWp = Math.round(actualPostLevelWhite + (wp - actualPostLevelWhite) * whitepoint_restore_strength);
+					restoredWp = Math.round(actualPostLevelWhite + (wp - actualPostLevelWhite) * (whitepoint_restore_strength / 100));
 					needWhite = true;
 				}
 			}
