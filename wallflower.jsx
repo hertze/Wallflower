@@ -762,8 +762,8 @@ try {
 
 		// Create luminance masks (pass scaled blur radius)
 		// Pass an explicit gamma (third argument) for Whole and Highlight masks to bias midtones when needed
-		createLuminanceMasks(0, 255, 0.9, "Whole Mask", doc_scale * blur_radius);
-		createLuminanceMasks(192, 255, 1.5, "Highlight Mask", 0);
+		createLuminanceMasks(0, 255, 0.85, "Whole Mask", doc_scale * blur_radius);
+		createLuminanceMasks(192, 255, 0.8, "Highlight Mask", 0);
 
 		// Check initial black/white points in Lab before preflash modifies the image.
 		var initialBlackPoint = 0;
@@ -940,7 +940,8 @@ try {
 		doc.activeLayer = grainLayer;
 		doc.selection.selectAll();
 		doc.selection.fill(greyColor)
-		grainLayer.applyAddNoise(doc_scale*5, NoiseDistribution.GAUSSIAN, true);
+		grainLayer.applyAddNoise(doc_scale*8, NoiseDistribution.GAUSSIAN, true);
+		grainLayer.applyGaussianBlur(doc_scale * 0.3);
 		doc.selection.load(doc.channels.getByName("Whole Mask"));
 		doc.selection.invert();
 		doc.selection.clear();
@@ -956,9 +957,9 @@ try {
 		
 		// Remove the mask channels since they're no longer needed
 		try {
-			var shadowMask = doc.channels.getByName("Shadow Mask");
-			if (shadowMask) {
-				shadowMask.remove();
+			var wholeMask = doc.channels.getByName("Whole Mask");
+			if (wholeMask) {
+				wholeMask.remove();
 			}
 		} catch (e) {}
 		
