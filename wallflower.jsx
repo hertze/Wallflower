@@ -11,9 +11,9 @@
 
 // Default settings ------------------------------------------------------------
 
-var pre_flash_r = 217;
-var pre_flash_g = 217;
-var pre_flash_b = 217;
+var pre_flash_r = 132;
+var pre_flash_g = 104;
+var pre_flash_b = 86;
 var pre_flash_strength = 20;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
@@ -477,7 +477,7 @@ function microSmooth(channelName, blurradius, noiseAmount) {
 	}
 }
 
-function createLuminanceMasks(rangeStart, rangeEnd, maskName, blurRadius) {
+function createLuminanceMasks(rangeStart, rangeEnd, gamma, maskName, blurRadius) {
 
 	// Work in RGB mode: create a temporary desaturated layer,
 	// adjust its levels to isolate the luminance range, then
@@ -497,7 +497,9 @@ function createLuminanceMasks(rangeStart, rangeEnd, maskName, blurRadius) {
 
 		// Apply levels to the layer to isolate the requested range
 		// adjustLevels on a layer modifies its pixels (RGB) which is fine
-		tempLayer.adjustLevels(rangeStart, rangeEnd, 1.0, 0, 255);
+		// Accept optional gamma (placed immediately after input range) to bias midtones when building masks
+		gamma = (gamma !== undefined) ? Math.max(0.25, Math.min(4.0, gamma)) : 1.0;
+		tempLayer.adjustLevels(rangeStart, rangeEnd, gamma, 0, 255);
 
 		if (rangeStart < 128) {
 			tempLayer.invert(); // Invert for shadow ranges to get mask
@@ -759,9 +761,9 @@ try {
 		}
 
 		// Create luminance masks (pass scaled blur radius)
-		createLuminanceMasks(0,255, "Whole Mask", doc_scale * blur_radius);
-		createLuminanceMasks(0,64, "Shadow Mask", 0);
-		createLuminanceMasks(192,255, "Highlight Mask", 0);
+		// Pass an explicit gamma (third argument) for Whole and Highlight masks to bias midtones when needed
+		createLuminanceMasks(0, 255, 0.9, "Whole Mask", doc_scale * blur_radius);
+		createLuminanceMasks(192, 255, 1.5, "Highlight Mask", 0);
 
 		// Check initial black/white points in Lab before preflash modifies the image.
 		var initialBlackPoint = 0;
