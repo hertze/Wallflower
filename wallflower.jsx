@@ -14,12 +14,12 @@
 var pre_flash_r = 132;
 var pre_flash_g = 104;
 var pre_flash_b = 86;
-var pre_flash_strength = 10;
+var pre_flash_strength = 30;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
 var preserve_whitepoint = false;
 var whitepoint_restore_strength = 70; // 1–100: percentage to restore the original white point
-var preserve_blackpoint = false;
+var preserve_blackpoint = true;
 var blackpoint_restore_strength = 70; // 1–100: percentage to restore the original black point
 var desaturation = true;
 
@@ -853,7 +853,7 @@ try {
 			}
 			// Blend lower mids back toward the gentler damped() result so the toe stays open.
 			var midBlend = preflash_mid_blend; // 0..1 where 1 = fully damped (less change), 0 = fully comp (more change)
-			var overallBias = Math.round((4 + 12 * paperResponseCoverage) * strengthNorm);
+			var overallBias = Math.round((6 + 14 * paperResponseCoverage) * strengthNorm);
 			var p0 = comp(0);
 			var p32 = comp(32);
 			var p64 = Math.round(comp(64) * (1 - midBlend) + gentle(64) * midBlend);
@@ -870,14 +870,15 @@ try {
 			var p255 = Math.max(p224, Math.min(p255Raw, p224 + (255 - 224)));
 			// Apply a small global darkening bias that scales with preflash strength
 			// while preserving the existing curve shape and anchor ordering.
+			var upperBiasScale = 1 + (0.6 * strengthNorm);
 			p0 = clamp255(p0 - Math.round(overallBias * 0.15));
 			p32 = Math.max(p0, clamp255(p32 - Math.round(overallBias * 0.3)));
-			p64 = Math.max(p32, clamp255(p64 - Math.round(overallBias * 0.45)));
-			p128 = Math.max(p64, clamp255(p128 - Math.round(overallBias * 0.75)));
-			p160 = Math.max(p128, clamp255(p160 - Math.round(overallBias * 0.9)));
-			p192 = Math.max(p160, clamp255(p192 - overallBias));
-			p224 = Math.max(p192, clamp255(p224 - overallBias));
-			p255 = Math.max(p224, clamp255(p255 - overallBias));
+			p64 = Math.max(p32, clamp255(p64 - Math.round(overallBias * 0.6)));
+			p128 = Math.max(p64, clamp255(p128 - Math.round(overallBias * (1.0 * upperBiasScale))));
+			p160 = Math.max(p128, clamp255(p160 - Math.round(overallBias * (1.15 * upperBiasScale))));
+			p192 = Math.max(p160, clamp255(p192 - Math.round(overallBias * (1.3 * upperBiasScale))));
+			p224 = Math.max(p192, clamp255(p224 - Math.round(overallBias * (1.4 * upperBiasScale))));
+			p255 = Math.max(p224, clamp255(p255 - Math.round(overallBias * (1.5 * upperBiasScale))));
 			// Step 1: preflash compensation curve - pure tone correction, no blackpoint logic.
 			var curvePoints = [
 				[0, p0],
