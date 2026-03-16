@@ -645,32 +645,6 @@ function computeImageWhitePoint(thresholdFraction) {
 	}
 }
 
-function computeAverageLightness() {
-	try {
-		var d = app.activeDocument;
-		var totalPixels = d.width.as("px") * d.height.as("px");
-		var sum = 0;
-		var i;
-		if (d.mode === DocumentMode.LAB) {
-			var lHist = d.channels.getByName(lightness_channel_name).histogram;
-			for (i = 0; i <= 255; i++) {
-				sum += (lHist[i] || 0) * i;
-			}
-		} else {
-			var rHist = d.channels[0].histogram;
-			var gHist = d.channels[1].histogram;
-			var bHist = d.channels[2].histogram;
-			for (i = 0; i <= 255; i++) {
-				var avg = ((rHist[i] || 0) + (gHist[i] || 0) + (bHist[i] || 0)) / 3.0;
-				sum += avg * i;
-			}
-		}
-		return totalPixels ? (sum / totalPixels) : 128;
-	} catch (e) {
-		return 128;
-	}
-}
-
 // Apply desaturation using the Whole Mask: duplicates layer, desaturates, masks and merges
 function applyDesaturation(pre_r, pre_g, pre_b, strength) {
 	try {
