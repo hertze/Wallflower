@@ -21,13 +21,9 @@ var preserve_whitepoint = true;
 var whitepoint_restore_strength = 20; // 1–100: percentage to restore the original white point
 var preserve_blackpoint = true;
 var blackpoint_restore_strength = 50; // 1–100: percentage to restore the original black point
-var adjust_preflash_chroma = true;
 var preflash_color_amount_setting = 100; // 0-200: preflash chroma amount (100 = current baseline)
 
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
-
-var desat_boost = 0.5; // how strongly to boost desaturation when mask coverage is small (0..1)
-var desaturation_amount_setting = 20; // user-editable amount (1..100) used as divisor
 
 var microSmooth_strength = 50; // opacity percentage for the micro-smoothing layer (0..100)
 
@@ -111,12 +107,14 @@ var save = false;
 <terminology><![CDATA[<< /Version 1
 	/Events <<
 	/f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4 [(Wallflower) <<
-	/recipe [(Recipe) /string]
+	/preflashr [(PreflashR) /integer]
+	/preflashg [(PreflashG) /integer]
+	/preflashb [(PreflashB) /integer]
+	/preflashstrength [(PreflashStrength) /integer]
+	/blurradius [(BlurRadius) /integer]
 	/savestatus [(Save) /boolean]
-	/autoadjust [(AutoAdjust) /boolean]
 	/savewhitepoint [(SaveWhitePoint) /boolean]
 	/saveblackpoint [(SaveBlackPoint) /boolean]
-	/adjustpreflashchroma [(AdjustPreflashChroma) /boolean]
 	/preflashcoloramt [(PreflashColorAmt) /integer]
 	/blackrestoreamt [(BlackRestoreAmt) /integer]
 	/whiterestoreamt [(WhiteRestoreAmt) /integer]
@@ -135,178 +133,205 @@ function coerceBoolean(value, fallback) {
 	return (fallback === true);
 }
 
+function coerceInteger(value, fallback, minVal, maxVal) {
+	var n = parseInt(value, 10);
+	if (isNaN(n)) n = fallback;
+	if (minVal !== undefined && n < minVal) n = minVal;
+	if (maxVal !== undefined && n > maxVal) n = maxVal;
+	return n;
+}
 
-function displayDialog(thisRecipe, saveStatus, autoAdjust, saveBlackParam, saveWhiteParam, adjustPreflashChromaParam, preflashColorAmountParam, blackRestoreParam, whiteRestoreParam, runmode) {
+function displayDialog(settings, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
 	dialog.text = "Wallflower";
 	dialog.orientation = "column";
 	dialog.alignChildren = ["left", "top"];
-	dialog.spacing = 10;
-	dialog.margins = 20;
+	dialog.spacing = 14;
+	dialog.margins = 24;
 
-	dialog.statictext1 = dialog.add("statictext", undefined, undefined, { name: "label" });
-	if (runmode != "edit") {
-		dialog.statictext1.text = "Paste your recipe here:";
-	} else {
-		dialog.statictext1.text = "Edit your recipe here:";
-	}
-	dialog.statictext1.alignment = ["fill", "top"];
+	settings = settings || {};
+	runmode = runmode || "normal";
 
-	dialog.edittext1 = dialog.add("edittext", undefined, undefined, { multiline: true });
-	dialog.edittext1.alignment = ["fill", "top"];
-	dialog.edittext1.size = [500, 50];
-	dialog.edittext1.text = thisRecipe ? thisRecipe : '';
-	
-	// Auto-adjust preflash checkbox
-	dialog.autoadjust = dialog.add("checkbox", undefined, "Auto-adjust Preflash");
-	dialog.autoadjust.value = coerceBoolean(autoAdjust, auto_adjust_preflash);
+	var preflashPanel = dialog.add("panel", undefined, "Preflash properties");
+	preflashPanel.orientation = "column";
+	preflashPanel.alignChildren = ["left", "center"];
+	preflashPanel.margins = 16;
+	preflashPanel.spacing = 10;
+
+	var rgbGroup = preflashPanel.add("group");
+	rgbGroup.orientation = "row";
+	rgbGroup.spacing = 6;
+	rgbGroup.add("statictext", undefined, "Preflash color (RGB)");
+	rgbGroup.add("statictext", undefined, "R:");
+	dialog.preflashR = rgbGroup.add("edittext", undefined, (settings.preflashr !== undefined ? settings.preflashr : pre_flash_r).toString());
+	dialog.preflashR.characters = 3;
+	rgbGroup.add("statictext", undefined, "G");
+	dialog.preflashG = rgbGroup.add("edittext", undefined, (settings.preflashg !== undefined ? settings.preflashg : pre_flash_g).toString());
+	dialog.preflashG.characters = 3;
+	rgbGroup.add("statictext", undefined, "B:");
+	dialog.preflashB = rgbGroup.add("edittext", undefined, (settings.preflashb !== undefined ? settings.preflashb : pre_flash_b).toString());
+	dialog.preflashB.characters = 3;
+
+	var strengthGroup = preflashPanel.add("group");
+	strengthGroup.orientation = "row";
+	strengthGroup.spacing = 6;
+	strengthGroup.add("statictext", undefined, "Preflash strength");
+	dialog.preflashStrength = strengthGroup.add("edittext", undefined, (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength).toString());
+	dialog.preflashStrength.characters = 4;
+	strengthGroup.add("statictext", undefined, "%");
+
+	var chromaGroup = preflashPanel.add("group");
+	chromaGroup.orientation = "row";
+	chromaGroup.spacing = 6;
+	chromaGroup.add("statictext", undefined, "Preflash Chroma");
+	dialog.preflashColorAmount = chromaGroup.add("edittext", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting).toString());
+	dialog.preflashColorAmount.characters = 4;
+	chromaGroup.add("statictext", undefined, "%");
+
+	var histogramBlurPanel = dialog.add("panel", undefined, "Histogram and blur");
+	histogramBlurPanel.orientation = "column";
+	histogramBlurPanel.alignChildren = ["left", "center"];
+	histogramBlurPanel.margins = 16;
+	histogramBlurPanel.spacing = 10;
 
 	// Keep White Point checkbox + restore strength field
-	var savewhiteGroup = dialog.add("group");
+	var savewhiteGroup = histogramBlurPanel.add("group");
 	savewhiteGroup.orientation = "row";
-	savewhiteGroup.spacing = 2;
+	savewhiteGroup.spacing = 6;
 	dialog.savewhite = savewhiteGroup.add("checkbox", undefined, "Preserve White Point at");
 	dialog.whiteRestoreAmount = savewhiteGroup.add("edittext", undefined, undefined, { name: "whiteRestoreAmount" });
 	dialog.whiteRestoreAmount.characters = 4;
 	try { dialog.whiteRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
 	var whitePctLabel = savewhiteGroup.add("statictext", undefined, "%");
 	try { whitePctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
-	dialog.savewhite.value = coerceBoolean(saveWhiteParam, preserve_whitepoint);
-	if (whiteRestoreParam !== undefined) {
-		dialog.whiteRestoreAmount.text = whiteRestoreParam.toString();
+	dialog.savewhite.value = coerceBoolean(settings.savewhitepoint, preserve_whitepoint);
+	if (settings.whiterestoreamt !== undefined) {
+		dialog.whiteRestoreAmount.text = settings.whiterestoreamt.toString();
 	} else {
 		dialog.whiteRestoreAmount.text = whitepoint_restore_strength.toString();
 	}
 
 	// Save original blackpoint checkbox + restore strength field
-	var saveblackGroup = dialog.add("group");
+	var saveblackGroup = histogramBlurPanel.add("group");
 	saveblackGroup.orientation = "row";
-	saveblackGroup.spacing = 2;
+	saveblackGroup.spacing = 6;
 	dialog.saveblack = saveblackGroup.add("checkbox", undefined, "Preserve Black Point at");
 	dialog.blackRestoreAmount = saveblackGroup.add("edittext", undefined, undefined, { name: "blackRestoreAmount" });
 	dialog.blackRestoreAmount.characters = 4;
 	try { dialog.blackRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
 	var blackPctLabel = saveblackGroup.add("statictext", undefined, "%");
 	try { blackPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
-	dialog.saveblack.value = coerceBoolean(saveBlackParam, preserve_blackpoint);
-	if (blackRestoreParam !== undefined) {
-		dialog.blackRestoreAmount.text = blackRestoreParam.toString();
+	dialog.saveblack.value = coerceBoolean(settings.saveblackpoint, preserve_blackpoint);
+	if (settings.blackrestoreamt !== undefined) {
+		dialog.blackRestoreAmount.text = settings.blackrestoreamt.toString();
 	} else {
 		dialog.blackRestoreAmount.text = blackpoint_restore_strength.toString();
 	}
 
-	// Preflash color amount (percent)
-	var preflashColorGroup = dialog.add("group");
-	preflashColorGroup.orientation = "row";
-	preflashColorGroup.spacing = 2;
-	dialog.adjustPreflashChroma = preflashColorGroup.add("checkbox", undefined, "Adjust Preflash Chroma to");
-	dialog.preflashColorAmount = preflashColorGroup.add("edittext", undefined, undefined, { name: "preflashColorAmount" });
-	dialog.preflashColorAmount.characters = 4;
-	try { dialog.preflashColorAmount.margins = [0, 0, 0, 0]; } catch(e) {}
-	var preflashColorPctLabel = preflashColorGroup.add("statictext", undefined, "%");
-	try { preflashColorPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
-	dialog.adjustPreflashChroma.value = coerceBoolean(adjustPreflashChromaParam, adjust_preflash_chroma);
-	if (preflashColorAmountParam !== undefined && preflashColorAmountParam !== null) {
-		dialog.preflashColorAmount.text = preflashColorAmountParam.toString();
-	} else {
-		dialog.preflashColorAmount.text = preflash_color_amount_setting.toString();
-	}
-	dialog.preflashColorAmount.enabled = dialog.adjustPreflashChroma.value;
-	dialog.adjustPreflashChroma.onClick = function () {
-		dialog.preflashColorAmount.enabled = dialog.adjustPreflashChroma.value;
-	};
+	var blurGroup = histogramBlurPanel.add("group");
+	blurGroup.orientation = "row";
+	blurGroup.spacing = 6;
+	blurGroup.add("statictext", undefined, "Blur radius");
+	dialog.blurRadius = blurGroup.add("edittext", undefined, (settings.blurradius !== undefined ? settings.blurradius : blur_radius).toString());
+	dialog.blurRadius.characters = 4;
 
 	dialog.savestatus = dialog.add("checkbox", undefined, "Save and Close When Done");
-	dialog.savestatus.value = coerceBoolean(saveStatus, save);
+	dialog.savestatus.value = coerceBoolean(settings.savestatus, save);
+
+	var buttonSpacer = dialog.add("statictext", undefined, "");
+	buttonSpacer.preferredSize = [1, 12];
+
+	var dialogSubmitted = false;
+	var dialogUsedDefaults = false;
 
 	var buttons = dialog.add( "group" );
-	var submit = buttons.add("button", undefined, undefined, { name: "submit" });
-	submit.text = "Use this recipe";
-	
-	submit.onClick = function () {
-		thisRecipe = dialog.edittext1.text;
-		saveStatus = dialog.savestatus.value;
-		autoAdjust = dialog.autoadjust.value;
-		preserve_whitepoint = dialog.savewhite.value;
-		preserve_blackpoint = dialog.saveblack.value;
-		adjust_preflash_chroma = dialog.adjustPreflashChroma.value;
-		var _pc = parseInt(dialog.preflashColorAmount.text);
-		if (!isNaN(_pc)) preflash_color_amount_setting = Math.max(0, Math.min(200, _pc));
-		var _bp = parseInt(dialog.blackRestoreAmount.text); if (!isNaN(_bp)) blackpoint_restore_strength = _bp;
-		var _wp = parseInt(dialog.whiteRestoreAmount.text); if (!isNaN(_wp)) whitepoint_restore_strength = _wp;
-		dialog.close();
-	};
-	
-	if (runmode != "edit") {
-		var without = buttons.add("button", undefined, undefined, { name: "without" });
-		without.text = "Use default settings";
-		
-		without.onClick = function () {
-			thisRecipe = "none";
-			saveStatus = false;
-			dialog.close();
+	buttons.spacing = 10;
+	var applyBtn = buttons.add("button", undefined, undefined, { name: "ok" });
+	if (runmode === "edit") {
+		applyBtn.text = "Use These Settings";
+		applyBtn.onClick = function () {
+			dialogSubmitted = true;
+			dialog.close(1);
+		};
+	} else {
+		applyBtn.text = "Run with Default Settings";
+		applyBtn.onClick = function () {
+			dialogUsedDefaults = true;
+			dialog.__useDefaults = true;
+			dialog.close(1);
 		};
 	}
-	
-	dialog.show();
+	var cancelBtn = buttons.add("button", undefined, "Cancel", { name: "cancel" });
+	cancelBtn.onClick = function () {
+		dialog.close(0);
+	};
+	var response = dialog.show();
+	if (response != 1) return null;
+	if (runmode === "edit" && !dialogSubmitted) return null;
+	if (runmode !== "edit" && !dialogUsedDefaults) return null;
+	if (dialog.__useDefaults === true) {
+		return {
+			"preflashr": pre_flash_r,
+			"preflashg": pre_flash_g,
+			"preflashb": pre_flash_b,
+			"preflashstrength": pre_flash_strength,
+			"blurradius": blur_radius,
+			"savestatus": save,
+			"savewhitepoint": preserve_whitepoint,
+			"saveblackpoint": preserve_blackpoint,
+			"preflashcoloramt": preflash_color_amount_setting,
+			"blackrestoreamt": blackpoint_restore_strength,
+			"whiterestoreamt": whitepoint_restore_strength
+		};
+	}
 
 	return {
-		"recipe": thisRecipe,
-		"savestatus": saveStatus,
-		"autoadjust": autoAdjust,
-		"savewhitepoint": preserve_whitepoint,
-		"saveblackpoint": preserve_blackpoint,
-		"adjustpreflashchroma": adjust_preflash_chroma,
-		"preflashcoloramt": preflash_color_amount_setting,
-		"blackrestoreamt": blackpoint_restore_strength,
-		"whiterestoreamt": whitepoint_restore_strength
+		"preflashr": coerceInteger(dialog.preflashR.text, pre_flash_r, 0, 255),
+		"preflashg": coerceInteger(dialog.preflashG.text, pre_flash_g, 0, 255),
+		"preflashb": coerceInteger(dialog.preflashB.text, pre_flash_b, 0, 255),
+		"preflashstrength": coerceInteger(dialog.preflashStrength.text, pre_flash_strength, 0, 100),
+		"blurradius": coerceInteger(dialog.blurRadius.text, blur_radius, 0, 100),
+		"savestatus": dialog.savestatus.value,
+		"savewhitepoint": dialog.savewhite.value,
+		"saveblackpoint": dialog.saveblack.value,
+		"preflashcoloramt": coerceInteger(dialog.preflashColorAmount.text, preflash_color_amount_setting, 0, 200),
+		"blackrestoreamt": coerceInteger(dialog.blackRestoreAmount.text, blackpoint_restore_strength, 1, 100),
+		"whiterestoreamt": coerceInteger(dialog.whiteRestoreAmount.text, whitepoint_restore_strength, 1, 100)
 	};
 }
 
-function getRecipe() {
-	// Retrieve recipe from action or dialog
+function getSettings() {
+	// Retrieve settings from action or dialog
 	if (!app.playbackParameters.count) {
-		//normal run (from scripts menu)
-
-		var result = displayDialog();
-		
-		if (!result.recipe || result.recipe == '') { isCancelled = true; return } else {
+		// normal run (from scripts menu)
+		var result = displayDialog(undefined, "normal");
+		if (!result) { isCancelled = true; executeScript = false; return null; } else {
 			var d = new ActionDescriptor;
-			d.putString(stringIDToTypeID('recipe'), result.recipe);
+			d.putInteger(stringIDToTypeID('preflashr'), result.preflashr);
+			d.putInteger(stringIDToTypeID('preflashg'), result.preflashg);
+			d.putInteger(stringIDToTypeID('preflashb'), result.preflashb);
+			d.putInteger(stringIDToTypeID('preflashstrength'), result.preflashstrength);
+			d.putInteger(stringIDToTypeID('blurradius'), result.blurradius);
 			d.putBoolean(stringIDToTypeID('savestatus'), coerceBoolean(result.savestatus, save));
-				if (result.autoadjust !== undefined && result.autoadjust !== null) {
-					d.putBoolean(stringIDToTypeID('autoadjust'), coerceBoolean(result.autoadjust, auto_adjust_preflash));
-				}
-				if (result.savewhitepoint !== undefined && result.savewhitepoint !== null) {
-					d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
-				}
-				if (result.saveblackpoint !== undefined && result.saveblackpoint !== null) {
-					d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
-				}
-				if (result.adjustpreflashchroma !== undefined && result.adjustpreflashchroma !== null) {
-					d.putBoolean(stringIDToTypeID('adjustpreflashchroma'), coerceBoolean(result.adjustpreflashchroma, adjust_preflash_chroma));
-				}
-				if (result.preflashcoloramt !== undefined && result.preflashcoloramt !== null) {
-					d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
-				}
-				if (result.blackrestoreamt !== undefined && result.blackrestoreamt !== null) {
-					d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
-				}
-				if (result.whiterestoreamt !== undefined && result.whiterestoreamt !== null) {
-					d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
-				}
+			d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
+			d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
+			d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
+			d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
+			d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
 			app.playbackParameters = d;        
 			return result;
 		}
 	}
 	else {
-		var recipe = app.playbackParameters.getString(stringIDToTypeID('recipe'));
+		var preflashr = pre_flash_r;
+		var preflashg = pre_flash_g;
+		var preflashb = pre_flash_b;
+		var preflashstrength = pre_flash_strength;
+		var blurradius = blur_radius;
 		var savestatus = null;
-		var autoadjust = null;
 		var saveblack = null;
 		var savewhite = null;
-		var adjustpreflashchroma = null;
 		var preflashcoloramt = null;
 		var blackrestoreamt = null;
 		var whiterestoreamt = null;
@@ -317,20 +342,29 @@ function getRecipe() {
 			if (n > maxVal) n = maxVal;
 			return n;
 		}
+		try { preflashr = app.playbackParameters.getInteger(stringIDToTypeID('preflashr')); } catch(e) {
+			try { preflashr = app.playbackParameters.getString(stringIDToTypeID('preflashr')); } catch(ee) { preflashr = pre_flash_r; }
+		}
+		try { preflashg = app.playbackParameters.getInteger(stringIDToTypeID('preflashg')); } catch(e) {
+			try { preflashg = app.playbackParameters.getString(stringIDToTypeID('preflashg')); } catch(ee) { preflashg = pre_flash_g; }
+		}
+		try { preflashb = app.playbackParameters.getInteger(stringIDToTypeID('preflashb')); } catch(e) {
+			try { preflashb = app.playbackParameters.getString(stringIDToTypeID('preflashb')); } catch(ee) { preflashb = pre_flash_b; }
+		}
+		try { preflashstrength = app.playbackParameters.getInteger(stringIDToTypeID('preflashstrength')); } catch(e) {
+			try { preflashstrength = app.playbackParameters.getString(stringIDToTypeID('preflashstrength')); } catch(ee) { preflashstrength = pre_flash_strength; }
+		}
+		try { blurradius = app.playbackParameters.getInteger(stringIDToTypeID('blurradius')); } catch(e) {
+			try { blurradius = app.playbackParameters.getString(stringIDToTypeID('blurradius')); } catch(ee) { blurradius = blur_radius; }
+		}
 		try { savestatus = app.playbackParameters.getBoolean(stringIDToTypeID('savestatus')); } catch(e) {
 			try { savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus')); } catch(ee) { savestatus = undefined; }
-		}
-		try { autoadjust = app.playbackParameters.getBoolean(stringIDToTypeID('autoadjust')); } catch(e) {
-			try { autoadjust = app.playbackParameters.getString(stringIDToTypeID('autoadjust')); } catch(ee) { autoadjust = undefined; }
 		}
 		try { saveblack = app.playbackParameters.getBoolean(stringIDToTypeID('saveblackpoint')); } catch(e) {
 			try { saveblack = app.playbackParameters.getString(stringIDToTypeID('saveblackpoint')); } catch(ee) { saveblack = undefined; }
 		}
 		try { savewhite = app.playbackParameters.getBoolean(stringIDToTypeID('savewhitepoint')); } catch(e) {
 			try { savewhite = app.playbackParameters.getString(stringIDToTypeID('savewhitepoint')); } catch(ee) { savewhite = undefined; }
-		}
-		try { adjustpreflashchroma = app.playbackParameters.getBoolean(stringIDToTypeID('adjustpreflashchroma')); } catch(e) {
-			try { adjustpreflashchroma = app.playbackParameters.getString(stringIDToTypeID('adjustpreflashchroma')); } catch(ee) { adjustpreflashchroma = undefined; }
 		}
 		try { preflashcoloramt = app.playbackParameters.getInteger(stringIDToTypeID('preflashcoloramt')); } catch(e) {
 			try { preflashcoloramt = app.playbackParameters.getString(stringIDToTypeID('preflashcoloramt')); } catch(ee) {
@@ -341,37 +375,58 @@ function getRecipe() {
 			}
 		}
 		preflashcoloramt = normalizePercent(preflashcoloramt, preflash_color_amount_setting, 0, 200);
+		preflashr = normalizePercent(preflashr, pre_flash_r, 0, 255);
+		preflashg = normalizePercent(preflashg, pre_flash_g, 0, 255);
+		preflashb = normalizePercent(preflashb, pre_flash_b, 0, 255);
+		preflashstrength = normalizePercent(preflashstrength, pre_flash_strength, 0, 100);
+		blurradius = normalizePercent(blurradius, blur_radius, 0, 100);
 		try { blackrestoreamt = app.playbackParameters.getInteger(stringIDToTypeID('blackrestoreamt')); } catch(e) { blackrestoreamt = undefined; }
 		try { whiterestoreamt = app.playbackParameters.getInteger(stringIDToTypeID('whiterestoreamt')); } catch(e) { whiterestoreamt = undefined; }
 		
 		if (app.playbackDisplayDialogs == DialogModes.ALL) {
 			// user run action in dialog mode (edit action step)
-				var result = displayDialog(recipe, savestatus, autoadjust, saveblack, savewhite, adjustpreflashchroma, preflashcoloramt, blackrestoreamt, whiterestoreamt, "edit");
-			if (!result.recipe || result.recipe == "") { isCancelled = true; return } else {
+				var result = displayDialog({
+					preflashr: preflashr,
+					preflashg: preflashg,
+					preflashb: preflashb,
+					preflashstrength: preflashstrength,
+					blurradius: blurradius,
+					savestatus: savestatus,
+					saveblackpoint: saveblack,
+					savewhitepoint: savewhite,
+					preflashcoloramt: preflashcoloramt,
+					blackrestoreamt: blackrestoreamt,
+					whiterestoreamt: whiterestoreamt
+				}, "edit");
+			if (!result) { isCancelled = true; executeScript = false; return null; } else {
 				var d = new ActionDescriptor;
-				d.putString(stringIDToTypeID('recipe'), result.recipe);
+				d.putInteger(stringIDToTypeID('preflashr'), result.preflashr);
+				d.putInteger(stringIDToTypeID('preflashg'), result.preflashg);
+				d.putInteger(stringIDToTypeID('preflashb'), result.preflashb);
+				d.putInteger(stringIDToTypeID('preflashstrength'), result.preflashstrength);
+				d.putInteger(stringIDToTypeID('blurradius'), result.blurradius);
 				d.putBoolean(stringIDToTypeID('savestatus'), coerceBoolean(result.savestatus, save));
-					d.putBoolean(stringIDToTypeID('autoadjust'), coerceBoolean(result.autoadjust, auto_adjust_preflash));
-					d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
-					d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
-					d.putBoolean(stringIDToTypeID('adjustpreflashchroma'), coerceBoolean(result.adjustpreflashchroma, adjust_preflash_chroma));
-					d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
-					d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
-					d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
+				d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
+				d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
+				d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
+				d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
+				d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
 				app.playbackParameters = d;
 			}
 			executeScript = false;
 			return result;
 		}
 		if (app.playbackDisplayDialogs != DialogModes.ALL) {
-			// user run script without recording
+			// user run script without recording dialogs
 			return {
-				"recipe": recipe,
+				"preflashr": preflashr,
+				"preflashg": preflashg,
+				"preflashb": preflashb,
+				"preflashstrength": preflashstrength,
+				"blurradius": blurradius,
 				"savestatus": savestatus,
-				"autoadjust": autoadjust,
 				"savewhitepoint": savewhite,
 				"saveblackpoint": saveblack,
-				"adjustpreflashchroma": adjustpreflashchroma,
 				"preflashcoloramt": preflashcoloramt,
 			"blackrestoreamt": blackrestoreamt,
 			"whiterestoreamt": whiterestoreamt
@@ -380,12 +435,9 @@ function getRecipe() {
 	}
 }
 
-function processRecipe(runtimesettings) {
-	// Process the recipe and change settings
-	var thisRecipe = runtimesettings.recipe;
+function processSettings(runtimesettings) {
+	// Process dialog/action settings and update runtime globals
 	var saveStatus = runtimesettings.savestatus;
-	var autoAdjustSetting = runtimesettings.autoadjust;
-	var adjustPreflashChromaSetting = runtimesettings.adjustpreflashchroma;
 	save = coerceBoolean(saveStatus, false);
 		// Apply preserve_whitepoint setting from dialog/playbackParameters if present
 		if (runtimesettings.savewhitepoint !== undefined && runtimesettings.savewhitepoint !== null) {
@@ -395,27 +447,22 @@ function processRecipe(runtimesettings) {
 		if (runtimesettings.saveblackpoint !== undefined && runtimesettings.saveblackpoint !== null) {
 			preserve_blackpoint = coerceBoolean(runtimesettings.saveblackpoint, preserve_blackpoint);
 		}
-	thisRecipe = thisRecipe.replace(/\s+/g, ""); // Removes spaces
-	thisRecipe = thisRecipe.replace(/;+$/, ""); // Removes trailing ;
-	
-	// Check recipe against syntax (R;G;B;strength)
-	const regex = new RegExp('^(?:0|(?:[1-9][0-9]?)|(?:1[0-9][0-9])|(?:2[0-4][0-9])|(?:25[0-5]));(?:0|(?:[1-9][0-9]?)|(?:1[0-9][0-9])|(?:2[0-4][0-9])|(?:25[0-5]));(?:0|(?:[1-9][0-9]?)|(?:1[0-9][0-9])|(?:2[0-4][0-9])|(?:25[0-5]));(?:0|(?:[1-9][0-9]?)|100);(?:0|(?:[1-9][0-9]?)|100)$', 'm');
 
-	if (regex.exec(thisRecipe) !== null) {
-		thisRecipe = thisRecipe.split(";"); // Splits into array at ;
-		pre_flash_r = parseInt(thisRecipe[0]);
-		pre_flash_g = parseInt(thisRecipe[1]);
-		pre_flash_b = parseInt(thisRecipe[2]);
-		pre_flash_strength = parseInt(thisRecipe[3]);
-		blur_radius = parseInt(thisRecipe[4]);
-		// Apply autoadjust setting from dialog/playbackParameters if present
-		if (autoAdjustSetting !== undefined && autoAdjustSetting !== null) {
-			auto_adjust_preflash = coerceBoolean(autoAdjustSetting, auto_adjust_preflash);
+		if (runtimesettings.preflashr !== undefined && runtimesettings.preflashr !== null) {
+			pre_flash_r = coerceInteger(runtimesettings.preflashr, pre_flash_r, 0, 255);
 		}
-			// Apply adjust preflash chroma setting from dialog/playbackParameters if present
-			if (adjustPreflashChromaSetting !== undefined && adjustPreflashChromaSetting !== null) {
-				adjust_preflash_chroma = coerceBoolean(adjustPreflashChromaSetting, adjust_preflash_chroma);
-			}
+		if (runtimesettings.preflashg !== undefined && runtimesettings.preflashg !== null) {
+			pre_flash_g = coerceInteger(runtimesettings.preflashg, pre_flash_g, 0, 255);
+		}
+		if (runtimesettings.preflashb !== undefined && runtimesettings.preflashb !== null) {
+			pre_flash_b = coerceInteger(runtimesettings.preflashb, pre_flash_b, 0, 255);
+		}
+		if (runtimesettings.preflashstrength !== undefined && runtimesettings.preflashstrength !== null) {
+			pre_flash_strength = coerceInteger(runtimesettings.preflashstrength, pre_flash_strength, 0, 100);
+		}
+		if (runtimesettings.blurradius !== undefined && runtimesettings.blurradius !== null) {
+			blur_radius = coerceInteger(runtimesettings.blurradius, blur_radius, 0, 100);
+		}
 			// Apply preflash color amount (percent) from dialog/playbackParameters if present
 			if (runtimesettings.preflashcoloramt !== undefined && runtimesettings.preflashcoloramt !== null) {
 				var _pc = parseInt(runtimesettings.preflashcoloramt, 10);
@@ -428,10 +475,6 @@ function processRecipe(runtimesettings) {
 			if (runtimesettings.whiterestoreamt !== undefined && runtimesettings.whiterestoreamt !== null) {
 				var _wp = parseInt(runtimesettings.whiterestoreamt); if (!isNaN(_wp)) whitepoint_restore_strength = _wp;
 			}
-	} else {
-		executeScript = false;
-		alert("Sorry, but that recipe is faulty! Please check it's syntax and it's settings and then try again.");
-	}
 }
 
 function saveClose() {
@@ -563,29 +606,6 @@ function createLuminanceMasks(rangeStart, rangeEnd, gamma, maskName, blurRadius)
 }
 
 // Compute desaturation amount (percent) from preflash color and strength
-function computeDesaturationAmount(r_in, g_in, b_in, strength) {
-	// NOTE: this function now expects coverage to be applied by caller via multiplier.
-	// Base desaturation: 1%..10% mapped from strength (0..100)
-	var base_desat = Math.max(1, Math.min(10, Math.round(1 + (strength / 100) * 9)));
-
-	// Clamp and normalize inputs
-	var r = Math.max(0, Math.min(255, Math.round(r_in || 0)));
-	var g = Math.max(0, Math.min(255, Math.round(g_in || 0)));
-	var b = Math.max(0, Math.min(255, Math.round(b_in || 0)));
-	var maxc = Math.max(r, g, b);
-	var minc = Math.min(r, g, b);
-
-	// Simple estimate of colorfulness: (max-min)/max -> 0..1
-	var colorSat = (maxc > 0) ? ((maxc - minc) / maxc) : 0;
-
-	// Extra desaturation contribution scaled by strength (max ~5%)
-	var extra_scale = 5;
-	var extra_desat = Math.round(colorSat * (strength / 100) * extra_scale);
-
-	// Combine (coverage multiplier applied by caller). Return raw value here.
-	return Math.max(1, Math.min(30, base_desat + extra_desat));
-}
-
 // Compute how much of the provided mask channel is 'on' (0..1 average brightness)
 function computeMaskCoverage(channelName) {
 	try {
@@ -663,38 +683,6 @@ function computeImageWhitePoint(thresholdFraction) {
 		return 0;
 	}
 }
-
-// Apply desaturation using the Whole Mask: duplicates layer, desaturates, masks and merges
-function applyDesaturation(pre_r, pre_g, pre_b, strength) {
-	try {
-		var coverage = computeMaskCoverage("Whole Mask");
-		var raw_desat = computeDesaturationAmount(pre_r, pre_g, pre_b, strength);
-		var multiplier = 1 + (1 - coverage) * desat_boost; // 1..1+desat_boost
-		// Normalize computed desaturation into 0.0..1.0 (reduce divisor to strengthen effect)
-		var normalized = Math.min(1.0, (raw_desat * multiplier) / 15.0);
-		// Scale by user percent (1..100) so amount=100 can yield full 100% opacity
-		var final_desat = Math.max(0, Math.min(100, Math.round(normalized * desaturation_amount_setting)));
-
-		var desatLayer = imagelayer.duplicate();
-		desatLayer.name = "Desaturation";
-		desatLayer.blendMode = BlendMode.SATURATION;
-		desatLayer.opacity = final_desat;
-		desatLayer.desaturate();
-
-		app.activeDocument.activeLayer = desatLayer;
-
-		// Load the whole-mask into the selection, clear outside the mask
-		doc.selection.load(doc.channels.getByName("Whole Mask"), SelectionType.REPLACE);
-		doc.selection.invert();
-		doc.selection.clear();
-		doc.selection.deselect();
-
-		desatLayer.merge();
-	} catch (e) {
-		// fail silently; desaturation is non-critical
-	}
-}
-
 function softenImage(layer, radius) {
 	var doc = app.activeDocument;
 	var originalLayer = doc.activeLayer;
@@ -794,9 +782,18 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 		var p32 = 32 + shadowLift * 0.88 - midPull * 0.08;
 		var p64 = 64 + shadowLift * 1.12 - midPull * 0.22;
 		var p128 = 128 + exposureLift - midPull;
-		var p160 = 160 + exposureLift * 0.74 - (midPull * 0.62 + highPull * 0.18);
-		var p192 = 192 + exposureLift * 0.48 - highPull;
-		var p224 = 224 + exposureLift * 0.24 - highPull * 0.88;
+		var shoulderStrength = 0.65 + 0.45 * strengthNorm;
+		if (preserve_whitepoint) shoulderStrength = shoulderStrength * 0.82;
+		var p160 = 160 + exposureLift * 0.68 - (midPull * 0.64 + highPull * (0.22 * shoulderStrength));
+		var p192 = 192 + exposureLift * 0.36 - highPull * (1.08 * shoulderStrength);
+		var p224 = 224 + exposureLift * 0.10 - highPull * (1.18 * shoulderStrength);
+
+		// Blend upper anchors toward a gentler shoulder trajectory for smoother rolloff.
+		var shoulderSmooth = 0.30 + 0.40 * strengthNorm;
+		var p192Target = p160 + (192 - 160) * 0.56;
+		var p224Target = p192 + (224 - 192) * 0.44;
+		p192 = p192 * (1 - shoulderSmooth) + p192Target * shoulderSmooth;
+		p224 = p224 * (1 - shoulderSmooth) + p224Target * shoulderSmooth;
 
 		p32 = clamp255(p32);
 		p64 = clamp255(p64);
@@ -891,7 +888,7 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 		// Strong, linear chroma ramp for predictable behavior.
 		var targetA = preflashColor.lab.a;
 		var targetB = preflashColor.lab.b;
-		var colorAmountNorm = adjust_preflash_chroma ? Math.max(0, Math.min(2, (preflash_color_amount_setting || 0) / 100)) : 1;
+		var colorAmountNorm = Math.max(0, Math.min(2, (preflash_color_amount_setting || 0) / 100));
 		var deltaA = Math.round(targetA * chromaScale * colorAmountNorm);
 		var deltaB = Math.round(targetB * chromaScale * colorAmountNorm);
 
@@ -979,8 +976,12 @@ var doc_scale = Math.min(doc.width, doc.height) / 3600;
 
 var executeScript = true;
 var isCancelled = false;
-var runtimesettings = getRecipe();
-if (runtimesettings.recipe != "none") { processRecipe(runtimesettings); }
+var runtimesettings = getSettings();
+if (runtimesettings) {
+	processSettings(runtimesettings);
+} else {
+	executeScript = false;
+}
 
 // Colors
 var preflashColor = new SolidColor();
