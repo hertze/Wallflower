@@ -794,7 +794,7 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 		var p255 = 255;
 
 		// Exposure lift centered around mids with compensation to keep average brightness stable.
-		var exposureLift = 24 * strengthNorm * (0.9 + 0.2 * wholeMaskCoverage) * (1 + 0.18 * chromaNorm);
+		var exposureLift = 24 * strengthNorm * (0.9 + 0.2 * wholeMaskCoverage) * (1 + 0.5 * strengthNorm);
 		var midPull = exposureLift * (preserve_whitepoint ? 0.62 : 0.78);
 		var highPull = exposureLift * (preserve_whitepoint ? 0.78 : 1.02);
 		// Make dark-region lift scale more strongly with preflash strength.
