@@ -89,6 +89,24 @@ var blackpoint_tolerance = 2; // bins; only remap when initial black is at least
 var whitepoint_threshold_fraction = 0.003; // tight (0.1%) - finds the actual top-end occupied bin, not clipped specular
 var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
 
+// Preflash color presets (name + RGB). Selecting a preset will populate the RGB fields below.
+var _presets = [
+	{ name: "Soft Yellow", rgb: [235,220,170] },
+	{ name: "Aged Yellow", rgb: [220,205,160] },
+	{ name: "Amber", rgb: [225,170,95] },
+	{ name: "Sandstone", rgb: [205,190,170] },
+	{ name: "Warm Brown", rgb: [210,180,150] },
+	{ name: "Rust Red", rgb: [185,105,75] },
+	{ name: "Muted Red", rgb: [170,70,70] },
+	{ name: "Peach", rgb: [235,185,165] },
+	{ name: "Rose+", rgb: [220,150,160] },
+	{ name: "Cool Blue", rgb: [150,170,200] },
+	{ name: "Deep Blue", rgb: [120,140,180] },
+	{ name: "Cinematic Cyan", rgb: [155,185,185] },
+	{ name: "Subtle Cyan", rgb: [170,200,200] },
+	{ name: "Cool Neutral", rgb: [210,215,225] }
+];
+
 var save = false;
 		
 
@@ -159,6 +177,17 @@ function displayDialog(settings, runmode) {
 	preflashPanel.margins = 14;
 	preflashPanel.spacing = 10;
 
+	var presetNames = [];
+	for (var pi = 0; pi < _presets.length; pi++) presetNames.push(_presets[pi].name);
+	var presetDropdown = preflashPanel.add("dropdownlist", undefined, presetNames);
+	try {
+		presetDropdown.preferredSize = [260, 30];
+		presetDropdown.margins = [8,6,8,6];
+		// Use a slightly larger font so items render with increased row height
+		try { presetDropdown.graphics.font = ScriptUI.newFont(presetDropdown.graphics.font.name, presetDropdown.graphics.font.style, 13); } catch(e) {}
+	} catch(e) {}
+	presetDropdown.selection = 0;
+
 	var rgbGroup = preflashPanel.add("group");
 	rgbGroup.orientation = "row";
 	rgbGroup.spacing = 6;
@@ -176,6 +205,31 @@ function displayDialog(settings, runmode) {
 	dialog.preflashB = rgbGroup.add("edittext", undefined, (settings.preflashb !== undefined ? settings.preflashb : pre_flash_b).toString());
 	dialog.preflashB.characters = 3;
 	try { dialog.preflashB.margins = [0,0,0,0]; } catch(e) {}
+
+	// After RGB fields exist, try to initialize the preset dropdown to match the current RGB.
+	(function initPresetSelection() {
+		var curR = coerceInteger(settings.preflashr !== undefined ? settings.preflashr : pre_flash_r, pre_flash_r, 0, 255);
+		var curG = coerceInteger(settings.preflashg !== undefined ? settings.preflashg : pre_flash_g, pre_flash_g, 0, 255);
+		var curB = coerceInteger(settings.preflashb !== undefined ? settings.preflashb : pre_flash_b, pre_flash_b, 0, 255);
+		for (var i = 0; i < _presets.length; i++) {
+			var p = _presets[i].rgb;
+			if (p[0] === curR && p[1] === curG && p[2] === curB) {
+				presetDropdown.selection = i;
+				return;
+			}
+		}
+	})();
+
+	// Wire preset selection to populate the RGB edit fields when the user changes it.
+	presetDropdown.onChange = function() {
+		try {
+			var sel = presetDropdown.selection.index;
+			var rgb = _presets[sel].rgb;
+			dialog.preflashR.text = String(rgb[0]);
+			dialog.preflashG.text = String(rgb[1]);
+			dialog.preflashB.text = String(rgb[2]);
+		} catch(e) {}
+	};
 
 	var strengthGroup = preflashPanel.add("group");
 	strengthGroup.orientation = "row";
