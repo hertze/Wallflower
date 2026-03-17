@@ -168,12 +168,12 @@ function displayDialog(settings, runmode) {
 	dialog.orientation = "column";
 	dialog.alignChildren = ["fill", "top"];
 	dialog.spacing = 14;
-	dialog.margins = 20;
+	dialog.margins = 30;
 
 	settings = settings || {};
 	runmode = runmode || "normal";
 
- 	var preflashPanel = dialog.add("panel", undefined, "Preflash Properties");
+ 	var preflashPanel = dialog.add("panel", undefined, "Preflash");
  	preflashPanel.orientation = "column";
  	preflashPanel.alignChildren = ["fill", "top"];
 	preflashPanel.margins = 14;
@@ -237,7 +237,7 @@ function displayDialog(settings, runmode) {
 	strengthGroup.orientation = "row";
 	strengthGroup.spacing = 6;
 	strengthGroup.alignment = ["fill", "top"];
-	strengthGroup.add("statictext", undefined, "Preflash Strength");
+	strengthGroup.add("statictext", undefined, "Preflash Brightness");
 	dialog.preflashStrength = strengthGroup.add("edittext", undefined, (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength).toString());
 	dialog.preflashStrength.characters = 4;
 	try { dialog.preflashStrength.margins = [0,0,0,0]; } catch(e) {}
@@ -253,7 +253,7 @@ function displayDialog(settings, runmode) {
 	try { dialog.preflashColorAmount.margins = [0,0,0,0]; } catch(e) {}
 	chromaGroup.add("statictext", undefined, "%");
 
- 	var histogramBlurPanel = dialog.add("panel", undefined, "Histogram and Blur");
+ 	var histogramBlurPanel = dialog.add("panel", undefined, "Histogram and Softening");
  	histogramBlurPanel.orientation = "column";
  	histogramBlurPanel.alignChildren = ["fill", "top"];
 	histogramBlurPanel.margins = 14;
@@ -264,7 +264,7 @@ function displayDialog(settings, runmode) {
 	savewhiteGroup.orientation = "row";
 	savewhiteGroup.spacing = 6;
 	savewhiteGroup.alignment = ["fill", "top"];
-	dialog.savewhite = savewhiteGroup.add("checkbox", undefined, "Preserve White Point at");
+	dialog.savewhite = savewhiteGroup.add("checkbox", undefined, "Preserve White Point");
 	dialog.whiteRestoreAmount = savewhiteGroup.add("edittext", undefined, undefined, { name: "whiteRestoreAmount" });
 	dialog.whiteRestoreAmount.characters = 4;
 	try { dialog.whiteRestoreAmount.margins = [0,0,0,0]; } catch(e) {}
@@ -283,7 +283,7 @@ function displayDialog(settings, runmode) {
 	saveblackGroup.orientation = "row";
 	saveblackGroup.spacing = 6;
 	saveblackGroup.alignment = ["fill", "top"];
-	dialog.saveblack = saveblackGroup.add("checkbox", undefined, "Preserve Black Point at");
+	dialog.saveblack = saveblackGroup.add("checkbox", undefined, "Preserve Black Point");
 	dialog.blackRestoreAmount = saveblackGroup.add("edittext", undefined, undefined, { name: "blackRestoreAmount" });
 	dialog.blackRestoreAmount.characters = 4;
 	try { dialog.blackRestoreAmount.margins = [0,0,0,0]; } catch(e) {}
@@ -301,7 +301,7 @@ function displayDialog(settings, runmode) {
 	blurGroup.orientation = "row";
 	blurGroup.spacing = 6;
 	blurGroup.alignment = ["fill", "top"];
-	blurGroup.add("statictext", undefined, "Blur radius");
+	blurGroup.add("statictext", undefined, "Softening amount");
 	dialog.blurRadius = blurGroup.add("edittext", undefined, (settings.blurradius !== undefined ? settings.blurradius : blur_radius).toString());
 	dialog.blurRadius.characters = 4;
 	try { dialog.blurRadius.margins = [0,0,0,0]; } catch(e) {}
@@ -978,17 +978,17 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 	// Step 1: add chroma in Lab safely by shifting a/b channels (relative move from current values).
 	applyChroma(tone.chromaScale);
 
-	doc.activeChannels = savedChannels;
+	//doc.activeChannels = savedChannels;
 
 	// Step 2: apply the Lightness curve after chroma.
 	// Endpoint mapping is baked into the Lightness curve points above.
 	applyLightness(tone.curvePoints);
+	
+	// Step 3: manipulate endpoints with Levels (input/output/gamma) after RGB conversion.
+	applyEndpointLevels(tone.p128);
 
 	// Convert back to RGB for the remaining pipeline stages.
 	doc.changeMode(ChangeMode.RGB);
-
-	// Step 3: manipulate endpoints with Levels (input/output/gamma) after RGB conversion.
-	applyEndpointLevels(tone.p128);
 
 }
 
