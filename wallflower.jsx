@@ -912,7 +912,7 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 		var sourceB = preflashColor.lab.b;
 		var sourceChroma = Math.sqrt(sourceA * sourceA + sourceB * sourceB);
 		var colorAmountNorm = Math.max(0, Math.min(2, (preflash_color_amount_setting || 0) / 100));
-		var baseTargetChroma = 40;
+		var baseTargetChroma = 80;
 		var targetChroma = baseTargetChroma * colorAmountNorm;
 		var targetA = 0;
 		var targetB = 0;
@@ -928,7 +928,7 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 		var deltaB = Math.round(targetB * deltaFactor);
 
 		// Mild safeguard: cap absolute a/b channel moves to prevent harsh shifts.
-		var maxDeltaAB = 44;
+		var maxDeltaAB = 96;
 		deltaA = Math.max(-maxDeltaAB, Math.min(maxDeltaAB, deltaA));
 		deltaB = Math.max(-maxDeltaAB, Math.min(maxDeltaAB, deltaB));
 
