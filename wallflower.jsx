@@ -30,6 +30,7 @@ var microSmooth_strength = 50; // opacity percentage for the micro-smoothing lay
 var preflash_auto_samples = 5; // grid samples per axis (5x5)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
 
+var whole_mask_reach = 255; // how far the whole mask extends (lower = more localized to shadows)
 var highlight_mask_gamma = 1.0; // gamma to bias highlight mask when building (lower = more midtone coverage)
 var whole_mask_gamma = 1.0; // gamma to bias whole mask when building (lower = more midtone coverage)
 var paper_response_mask_gamma = 0.65; // stronger toe weighting for print-response smoothing
@@ -91,23 +92,21 @@ var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at le
 
 
 // Preflash color presets (name + RGB). Selecting a preset will populate the RGB fields below.
-	var _presets = [
-		{ name: "Warm White", rgb: [255,246,232] },
-		{ name: "Warm RA-4 Yellow", rgb: [235,220,170] },
-		{ name: "Aged Paper Yellow", rgb: [220,205,160] },
-		{ name: "Amber Tone", rgb: [225,170,95] },
-		{ name: "Peach", rgb: [235,185,165] },
-		{ name: "Rose", rgb: [220,150,160] },
-		{ name: "Rustic Red", rgb: [185,105,75] },
-		{ name: "Muted Crimson", rgb: [170,70,70] },
-		{ name: "Warm Paper Brown", rgb: [210,180,150] },
-		{ name: "Sandstone", rgb: [205,190,170] },
-		{ name: "Cool Neutral", rgb: [210,215,225] },
-		{ name: "Cool Print Blue", rgb: [150,170,200] },
-		{ name: "Cinematic Cyan", rgb: [155,185,185] },
-		{ name: "Subtle Cyan", rgb: [170,200,200] },
-		{ name: "Deep Cyan Blue", rgb: [120,140,180] }
-	];
+var _presets = [
+	{ name: "Paper Warmth", rgb: [235,232,225] },
+	{ name: "RA-4 Yellow Bias", rgb: [235,220,170] },
+	{ name: "Aged Paper", rgb: [220,205,160] },
+	{ name: "Amber Filtration", rgb: [225,170,95] },
+	{ name: "Highlight Peach", rgb: [235,185,165] },
+	{ name: "Magenta Bias", rgb: [220,150,160] },
+	{ name: "Crossover Magenta", rgb: [170,70,70] },
+	{ name: "Paper Base Warm", rgb: [205,190,170] },
+	{ name: "Cool Neutral", rgb: [210,215,225] },
+	{ name: "Cool Print Bias", rgb: [150,170,200] },
+	{ name: "Cyan Crossover", rgb: [155,185,185] },
+	{ name: "Subtle Cyan Shift", rgb: [170,200,200] },
+	{ name: "Deep Cool Shift", rgb: [130,150,180] }
+];
 
 var save = false;
 		
@@ -137,6 +136,7 @@ var save = false;
 	/saveblackpoint [(SaveBlackPoint) /boolean]
 	/preflashcoloramt [(PreflashColorAmt) /integer]
 	/wholemaskgamma [(WholeMaskGamma) /string]
+	/wholemaskreach [(WholeMaskReach) /integer]
 	/blackrestoreamt [(BlackRestoreAmt) /integer]
 	/whiterestoreamt [(WhiteRestoreAmt) /integer]
 		>>]
@@ -174,7 +174,7 @@ function displayDialog(settings, runmode) {
 	settings = settings || {};
 	runmode = runmode || "normal";
 
- 	var preflashPanel = dialog.add("panel", undefined, "Preflash");
+ 	var preflashPanel = dialog.add("panel", undefined, "Preflash Brightness and Chroma");
  	preflashPanel.orientation = "column";
  	preflashPanel.alignChildren = ["fill", "top"];
 	preflashPanel.margins = 14;
@@ -288,8 +288,42 @@ function displayDialog(settings, runmode) {
 		this.text = String(Math.round(n));
 	};
 
+	// Whole Mask Range (0 - 255)
+	// Masking panel (contains Range and Gamma controls)
+	var maskingPanel = dialog.add("panel", undefined, "Preflash Masking");
+	maskingPanel.orientation = "column";
+	maskingPanel.alignChildren = ["fill", "top"];
+	maskingPanel.margins = 14;
+
+	var rangeGroup = maskingPanel.add("group");
+	rangeGroup.orientation = "row";
+	rangeGroup.spacing = 6;
+	rangeGroup.alignment = ["fill", "top"];
+	rangeGroup.add("statictext", undefined, "Range");
+	var initialReach = (settings.wholemaskreach !== undefined ? coerceInteger(settings.wholemaskreach, whole_mask_reach, 0, 255) : whole_mask_reach);
+	if (isNaN(initialReach)) initialReach = whole_mask_reach;
+	dialog.wholeMaskReachText = rangeGroup.add("edittext", undefined, String(initialReach));
+	dialog.wholeMaskReachText.characters = 4;
+	try { dialog.wholeMaskReachText.margins = [0,0,0,0]; } catch(e) {}
+	dialog.wholeMaskReach = rangeGroup.add("slider", undefined, initialReach, 0, 255);
+	try { dialog.wholeMaskReach.preferredSize = [220, 18]; } catch(e) {}
+
+	// Sync slider <-> edittext (integer)
+	dialog.wholeMaskReach.onChanging = dialog.wholeMaskReach.onChange = function() {
+		var v = Math.round(this.value);
+		dialog.wholeMaskReachText.text = String(v);
+	};
+	dialog.wholeMaskReachText.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = whole_mask_reach;
+		if (n < 0) n = 0;
+		if (n > 255) n = 255;
+		dialog.wholeMaskReach.value = n;
+		this.text = String(n);
+	};
+
 	// Whole Mask Gamma slider (0.0 - 2.0)
-	var gammaGroup = preflashPanel.add("group");
+	var gammaGroup = maskingPanel.add("group");
 	gammaGroup.orientation = "row";
 	gammaGroup.spacing = 6;
 	gammaGroup.alignment = ["fill", "top"];
@@ -316,7 +350,7 @@ function displayDialog(settings, runmode) {
 		this.text = (Math.round(n * 100) / 100).toFixed(2);
 	};
 
- 	var histogramBlurPanel = dialog.add("panel", undefined, "Histogram and Softening");
+ 	var histogramBlurPanel = dialog.add("panel", undefined, "Overall Histogram and Softening");
  	histogramBlurPanel.orientation = "column";
  	histogramBlurPanel.alignChildren = ["fill", "top"];
 	histogramBlurPanel.margins = 14;
@@ -465,6 +499,7 @@ function displayDialog(settings, runmode) {
 		"savewhitepoint": dialog.savewhite.value,
 		"saveblackpoint": dialog.saveblack.value,
 		"preflashcoloramt": coerceInteger(dialog.preflashColorAmount.text, preflash_color_amount_setting, 0, 200),
+		"wholemaskreach": coerceInteger(dialog.wholeMaskReachText.text, whole_mask_reach, 0, 255),
 		"wholemaskgamma": parseFloat(dialog.wholeMaskGammaText.text),
 		"blackrestoreamt": coerceInteger(dialog.blackRestoreAmount.text, blackpoint_restore_strength, 1, 100),
 		"whiterestoreamt": coerceInteger(dialog.whiteRestoreAmount.text, whitepoint_restore_strength, 1, 100)
@@ -487,6 +522,7 @@ function getSettings() {
 			d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
 			d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
 			d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
+			d.putInteger(stringIDToTypeID('wholemaskreach'), result.wholemaskreach);
 			// Store wholemaskgamma as a string to preserve float precision
 			d.putString(stringIDToTypeID('wholemaskgamma'), String((result.wholemaskgamma !== undefined ? result.wholemaskgamma : whole_mask_gamma)));
 			d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
@@ -547,6 +583,12 @@ function getSettings() {
 			}
 		}
 		preflashcoloramt = normalizePercent(preflashcoloramt, preflash_color_amount_setting, 0, 200);
+		// Read wholemaskreach (stored as integer)
+		var wholemaskreach = undefined;
+		try { wholemaskreach = app.playbackParameters.getInteger(stringIDToTypeID('wholemaskreach')); } catch(e) {
+			try { wholemaskreach = app.playbackParameters.getString(stringIDToTypeID('wholemaskreach')); } catch(ee) { wholemaskreach = undefined; }
+		}
+		wholemaskreach = normalizePercent(wholemaskreach, whole_mask_reach, 0, 255);
 		// Read wholemaskgamma (stored as integer*100 when saved from dialog)
 		var wholemaskgamma = undefined;
 		try { wholemaskgamma = app.playbackParameters.getInteger(stringIDToTypeID('wholemaskgamma')); } catch(e) {
@@ -581,6 +623,7 @@ function getSettings() {
 					saveblackpoint: saveblack,
 					savewhitepoint: savewhite,
 					preflashcoloramt: preflashcoloramt,
+					wholemaskreach: (wholemaskreach !== undefined ? wholemaskreach : whole_mask_reach),
 					wholemaskgamma: (wholemaskgammaFloat !== undefined ? wholemaskgammaFloat : whole_mask_gamma),
 					blackrestoreamt: blackrestoreamt,
 					whiterestoreamt: whiterestoreamt
@@ -596,6 +639,7 @@ function getSettings() {
 				d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
 				d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
 				d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
+				d.putInteger(stringIDToTypeID('wholemaskreach'), result.wholemaskreach);
 				// Store wholemaskgamma as a string to preserve float precision
 				d.putString(stringIDToTypeID('wholemaskgamma'), String((result.wholemaskgamma !== undefined ? result.wholemaskgamma : whole_mask_gamma)));
 				d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
@@ -617,7 +661,8 @@ function getSettings() {
 				"savewhitepoint": savewhite,
 				"saveblackpoint": saveblack,
 				"preflashcoloramt": preflashcoloramt,
-				"blackrestoreamt": blackrestoreamt,
+					"wholemaskreach": (wholemaskreach !== undefined ? wholemaskreach : undefined),
+					"blackrestoreamt": blackrestoreamt,
 				"whiterestoreamt": whiterestoreamt,
 				"wholemaskgamma": (wholemaskgammaFloat !== undefined ? wholemaskgammaFloat : undefined)
 			};
@@ -671,6 +716,11 @@ function processSettings(runtimesettings) {
 					var _wg = parseFloat(runtimesettings.wholemaskgamma);
 					if (!isNaN(_wg)) whole_mask_gamma = Math.max(0.25, Math.min(4.0, _wg));
 				}
+
+						// Apply whole mask reach if provided (integer 0-255)
+						if (runtimesettings.wholemaskreach !== undefined && runtimesettings.wholemaskreach !== null) {
+							whole_mask_reach = coerceInteger(runtimesettings.wholemaskreach, whole_mask_reach, 0, 255);
+						}
 }
 
 function saveClose() {
@@ -1193,7 +1243,7 @@ try {
 
 		// Create luminance masks (pass scaled blur radius)
 		// Pass an explicit gamma (third argument) for each mask to bias midtones when needed
-		createLuminanceMasks(0, 255, whole_mask_gamma, "Whole Mask", doc_scale * blur_radius);
+		createLuminanceMasks(0, whole_mask_reach, whole_mask_gamma, "Whole Mask", doc_scale * blur_radius);
 		createLuminanceMasks(0, paper_response_mask_range_end, paper_response_mask_gamma, "Paper Response Mask", doc_scale * blur_radius);
 		createLuminanceMasks(192, 255, highlight_mask_gamma, "Highlight Mask", 0);
 		var wholeMaskCoverage = computeMaskCoverage("Whole Mask");
