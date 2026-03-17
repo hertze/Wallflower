@@ -14,7 +14,7 @@
 var pre_flash_r = 182;
 var pre_flash_g = 96;
 var pre_flash_b = 44;
-var pre_flash_strength = 20;
+var pre_flash_strength = 100;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
 var preserve_whitepoint = true;
@@ -146,62 +146,72 @@ function displayDialog(settings, runmode) {
 	var dialog = new Window("dialog");
 	dialog.text = "Wallflower";
 	dialog.orientation = "column";
-	dialog.alignChildren = ["left", "top"];
+	dialog.alignChildren = ["fill", "top"];
 	dialog.spacing = 14;
-	dialog.margins = 24;
+	dialog.margins = 20;
 
 	settings = settings || {};
 	runmode = runmode || "normal";
 
-	var preflashPanel = dialog.add("panel", undefined, "Preflash properties");
-	preflashPanel.orientation = "column";
-	preflashPanel.alignChildren = ["left", "center"];
-	preflashPanel.margins = 16;
+ 	var preflashPanel = dialog.add("panel", undefined, "Preflash Properties");
+ 	preflashPanel.orientation = "column";
+ 	preflashPanel.alignChildren = ["fill", "top"];
+	preflashPanel.margins = 14;
 	preflashPanel.spacing = 10;
 
 	var rgbGroup = preflashPanel.add("group");
 	rgbGroup.orientation = "row";
 	rgbGroup.spacing = 6;
-	rgbGroup.add("statictext", undefined, "Preflash color (RGB)");
+	rgbGroup.alignment = ["fill", "top"];
+	rgbGroup.add("statictext", undefined, "Preflash Color (RGB)");
 	rgbGroup.add("statictext", undefined, "R:");
 	dialog.preflashR = rgbGroup.add("edittext", undefined, (settings.preflashr !== undefined ? settings.preflashr : pre_flash_r).toString());
 	dialog.preflashR.characters = 3;
-	rgbGroup.add("statictext", undefined, "G");
+	try { dialog.preflashR.margins = [0,0,0,0]; } catch(e) {}
+	rgbGroup.add("statictext", undefined, "G:");
 	dialog.preflashG = rgbGroup.add("edittext", undefined, (settings.preflashg !== undefined ? settings.preflashg : pre_flash_g).toString());
 	dialog.preflashG.characters = 3;
+	try { dialog.preflashG.margins = [0,0,0,0]; } catch(e) {}
 	rgbGroup.add("statictext", undefined, "B:");
 	dialog.preflashB = rgbGroup.add("edittext", undefined, (settings.preflashb !== undefined ? settings.preflashb : pre_flash_b).toString());
 	dialog.preflashB.characters = 3;
+	try { dialog.preflashB.margins = [0,0,0,0]; } catch(e) {}
 
 	var strengthGroup = preflashPanel.add("group");
 	strengthGroup.orientation = "row";
 	strengthGroup.spacing = 6;
-	strengthGroup.add("statictext", undefined, "Preflash strength");
+	strengthGroup.alignment = ["fill", "top"];
+	strengthGroup.add("statictext", undefined, "Preflash Strength");
 	dialog.preflashStrength = strengthGroup.add("edittext", undefined, (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength).toString());
 	dialog.preflashStrength.characters = 4;
+	try { dialog.preflashStrength.margins = [0,0,0,0]; } catch(e) {}
 	strengthGroup.add("statictext", undefined, "%");
 
 	var chromaGroup = preflashPanel.add("group");
 	chromaGroup.orientation = "row";
 	chromaGroup.spacing = 6;
+	chromaGroup.alignment = ["fill", "top"];
 	chromaGroup.add("statictext", undefined, "Preflash Chroma");
 	dialog.preflashColorAmount = chromaGroup.add("edittext", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting).toString());
 	dialog.preflashColorAmount.characters = 4;
+	try { dialog.preflashColorAmount.margins = [0,0,0,0]; } catch(e) {}
 	chromaGroup.add("statictext", undefined, "%");
 
-	var histogramBlurPanel = dialog.add("panel", undefined, "Histogram and blur");
-	histogramBlurPanel.orientation = "column";
-	histogramBlurPanel.alignChildren = ["left", "center"];
-	histogramBlurPanel.margins = 16;
+ 	var histogramBlurPanel = dialog.add("panel", undefined, "Histogram and Blur");
+ 	histogramBlurPanel.orientation = "column";
+ 	histogramBlurPanel.alignChildren = ["fill", "top"];
+	histogramBlurPanel.margins = 14;
 	histogramBlurPanel.spacing = 10;
 
 	// Keep White Point checkbox + restore strength field
 	var savewhiteGroup = histogramBlurPanel.add("group");
 	savewhiteGroup.orientation = "row";
 	savewhiteGroup.spacing = 6;
+	savewhiteGroup.alignment = ["fill", "top"];
 	dialog.savewhite = savewhiteGroup.add("checkbox", undefined, "Preserve White Point at");
 	dialog.whiteRestoreAmount = savewhiteGroup.add("edittext", undefined, undefined, { name: "whiteRestoreAmount" });
 	dialog.whiteRestoreAmount.characters = 4;
+	try { dialog.whiteRestoreAmount.margins = [0,0,0,0]; } catch(e) {}
 	try { dialog.whiteRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
 	var whitePctLabel = savewhiteGroup.add("statictext", undefined, "%");
 	try { whitePctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
@@ -216,9 +226,11 @@ function displayDialog(settings, runmode) {
 	var saveblackGroup = histogramBlurPanel.add("group");
 	saveblackGroup.orientation = "row";
 	saveblackGroup.spacing = 6;
+	saveblackGroup.alignment = ["fill", "top"];
 	dialog.saveblack = saveblackGroup.add("checkbox", undefined, "Preserve Black Point at");
 	dialog.blackRestoreAmount = saveblackGroup.add("edittext", undefined, undefined, { name: "blackRestoreAmount" });
 	dialog.blackRestoreAmount.characters = 4;
+	try { dialog.blackRestoreAmount.margins = [0,0,0,0]; } catch(e) {}
 	try { dialog.blackRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
 	var blackPctLabel = saveblackGroup.add("statictext", undefined, "%");
 	try { blackPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
@@ -232,15 +244,17 @@ function displayDialog(settings, runmode) {
 	var blurGroup = histogramBlurPanel.add("group");
 	blurGroup.orientation = "row";
 	blurGroup.spacing = 6;
+	blurGroup.alignment = ["fill", "top"];
 	blurGroup.add("statictext", undefined, "Blur radius");
 	dialog.blurRadius = blurGroup.add("edittext", undefined, (settings.blurradius !== undefined ? settings.blurradius : blur_radius).toString());
 	dialog.blurRadius.characters = 4;
+	try { dialog.blurRadius.margins = [0,0,0,0]; } catch(e) {}
 
 	dialog.savestatus = dialog.add("checkbox", undefined, "Save and Close When Done");
 	dialog.savestatus.value = coerceBoolean(settings.savestatus, save);
 
 	var buttonSpacer = dialog.add("statictext", undefined, "");
-	buttonSpacer.preferredSize = [1, 12];
+	buttonSpacer.preferredSize = [1, 10];
 
 	var dialogSubmitted = false;
 	var dialogUsedDefaults = false;
@@ -255,8 +269,13 @@ function displayDialog(settings, runmode) {
 			dialog.close(1);
 		};
 	} else {
-		applyBtn.text = "Run with Default Settings";
+		applyBtn.text = "Run";
 		applyBtn.onClick = function () {
+			dialogSubmitted = true;
+			dialog.close(1);
+		};
+		var defaultsBtn = buttons.add("button", undefined, "Run with Default Settings");
+		defaultsBtn.onClick = function () {
 			dialogUsedDefaults = true;
 			dialog.__useDefaults = true;
 			dialog.close(1);
@@ -269,7 +288,7 @@ function displayDialog(settings, runmode) {
 	var response = dialog.show();
 	if (response != 1) return null;
 	if (runmode === "edit" && !dialogSubmitted) return null;
-	if (runmode !== "edit" && !dialogUsedDefaults) return null;
+	if (runmode !== "edit" && !dialogSubmitted && !dialogUsedDefaults) return null;
 	if (dialog.__useDefaults === true) {
 		return {
 			"preflashr": pre_flash_r,
@@ -622,38 +641,6 @@ function computeMaskCoverage(channelName) {
 	}
 }
 
-// Compute the first 'significant' black histogram bin (0..255) where
-// cumulative pixel count exceeds `thresholdFraction` of the image.
-// Works in both RGB mode (averages R/G/B channels) and Lab mode (uses L channel only).
-function computeImageBlackPoint(thresholdFraction) {
-	try {
-		var d = app.activeDocument;
-		var totalPixels = d.width.as("px") * d.height.as("px");
-		var threshold = Math.max(0, Math.min(1, (thresholdFraction !== undefined) ? thresholdFraction : blackpoint_threshold_fraction));
-		var cumulative = 0;
-		if (d.mode === DocumentMode.LAB) {
-			// In Lab mode read the Lightness channel by name
-			var lHist = d.channels.getByName(lightness_channel_name).histogram;
-			for (var i = 0; i <= 255; i++) {
-				cumulative += (lHist[i] || 0);
-				if (totalPixels && (cumulative / totalPixels) >= threshold) return i;
-			}
-		} else {
-			var rHist = d.channels[0].histogram;
-			var gHist = d.channels[1].histogram;
-			var bHist = d.channels[2].histogram;
-			for (var i = 0; i <= 255; i++) {
-				var avg = ((rHist[i] || 0) + (gHist[i] || 0) + (bHist[i] || 0)) / 3.0;
-				cumulative += avg;
-				if (totalPixels && (cumulative / totalPixels) >= threshold) return i;
-			}
-		}
-		return 255;
-	} catch (e) {
-		return 255;
-	}
-}
-
 // Compute the last 'significant' white histogram bin (0..255) scanning from the top.
 // Use a tight thresholdFraction (e.g. 0.001) so specular-clipped bins don't dominate.
 function computeImageWhitePoint(thresholdFraction) {
@@ -726,7 +713,7 @@ function softenImage(layer, radius) {
 	}
 }
 
-function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, paperResponseCoverage) {
+function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 	preserve_blackpoint = (preserve_blackpoint === true || preserve_blackpoint === "true");
 	preserve_whitepoint = (preserve_whitepoint === true || preserve_whitepoint === "true");
 
@@ -889,8 +876,17 @@ function applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, 
 		var targetA = preflashColor.lab.a;
 		var targetB = preflashColor.lab.b;
 		var colorAmountNorm = Math.max(0, Math.min(2, (preflash_color_amount_setting || 0) / 100));
-		var deltaA = Math.round(targetA * chromaScale * colorAmountNorm);
-		var deltaB = Math.round(targetB * chromaScale * colorAmountNorm);
+		// Mild safeguard: softly roll off very high-strength chroma pushes.
+		var highStrengthRolloff = 1 - 0.28 * Math.pow(strengthNorm, 1.35);
+		if (highStrengthRolloff < 0.65) highStrengthRolloff = 0.65;
+		var deltaFactor = chromaScale * colorAmountNorm * highStrengthRolloff;
+		var deltaA = Math.round(targetA * deltaFactor);
+		var deltaB = Math.round(targetB * deltaFactor);
+
+		// Mild safeguard: cap absolute a/b channel moves to prevent harsh shifts.
+		var maxDeltaAB = 44;
+		deltaA = Math.max(-maxDeltaAB, Math.min(maxDeltaAB, deltaA));
+		deltaB = Math.max(-maxDeltaAB, Math.min(maxDeltaAB, deltaB));
 
 		function shiftedCurve(delta) {
 			// Paper-like chroma response: strongest in lower mids/mids,
@@ -1016,18 +1012,8 @@ try {
 		var wholeMaskCoverage = computeMaskCoverage("Whole Mask");
 		var paperResponseCoverage = computeMaskCoverage("Paper Response Mask");
 
-		// Check initial black/white points in Lab before preflash modifies the image.
-		var initialBlackPoint = 0;
-		var initialWhitePoint = 255;
-		try {
-			doc.changeMode(ChangeMode.LAB);
-			if (preserve_blackpoint) initialBlackPoint = computeImageBlackPoint();
-			if (preserve_whitepoint) initialWhitePoint = computeImageWhitePoint(whitepoint_threshold_fraction);
-			doc.changeMode(ChangeMode.RGB);
-		} catch (e) { initialBlackPoint = 0; initialWhitePoint = 255; }
-
 		// Preflash
-		applyPreflash(initialBlackPoint, initialWhitePoint, wholeMaskCoverage, paperResponseCoverage);
+		applyPreflash(wholeMaskCoverage, paperResponseCoverage);
 
 		// Lower micro contrast
 		var microContratLayer = imagelayer.duplicate();
