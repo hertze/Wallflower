@@ -11,9 +11,9 @@
 
 // Default settings ------------------------------------------------------------
 
-var pre_flash_r = 182;
-var pre_flash_g = 96;
-var pre_flash_b = 44;
+var pre_flash_r = 255;
+var pre_flash_g = 246;
+var pre_flash_b = 232;
 var pre_flash_strength = 30;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
@@ -21,7 +21,7 @@ var preserve_whitepoint = true;
 var whitepoint_restore_strength = 20; // 1–100: percentage to restore the original white point
 var preserve_blackpoint = true;
 var blackpoint_restore_strength = 50; // 1–100: percentage to restore the original black point
-var preflash_color_amount_setting = 100; // 0-200: preflash chroma amount (100 = current baseline)
+var preflash_color_amount_setting = 30; // 0-200: preflash chroma amount (100 = current baseline)
 
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
 
@@ -89,23 +89,25 @@ var blackpoint_tolerance = 2; // bins; only remap when initial black is at least
 var whitepoint_threshold_fraction = 0.003; // tight (0.1%) - finds the actual top-end occupied bin, not clipped specular
 var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
 
+
 // Preflash color presets (name + RGB). Selecting a preset will populate the RGB fields below.
-var _presets = [
-	{ name: "Soft Yellow", rgb: [235,220,170] },
-	{ name: "Aged Yellow", rgb: [220,205,160] },
-	{ name: "Amber", rgb: [225,170,95] },
-	{ name: "Sandstone", rgb: [205,190,170] },
-	{ name: "Warm Brown", rgb: [210,180,150] },
-	{ name: "Rust Red", rgb: [185,105,75] },
-	{ name: "Muted Red", rgb: [170,70,70] },
-	{ name: "Peach", rgb: [235,185,165] },
-	{ name: "Rose+", rgb: [220,150,160] },
-	{ name: "Cool Blue", rgb: [150,170,200] },
-	{ name: "Deep Blue", rgb: [120,140,180] },
-	{ name: "Cinematic Cyan", rgb: [155,185,185] },
-	{ name: "Subtle Cyan", rgb: [170,200,200] },
-	{ name: "Cool Neutral", rgb: [210,215,225] }
-];
+	var _presets = [
+		{ name: "Warm White", rgb: [255,246,232] },
+		{ name: "Warm RA-4 Yellow", rgb: [235,220,170] },
+		{ name: "Aged Paper Yellow", rgb: [220,205,160] },
+		{ name: "Amber Tone", rgb: [225,170,95] },
+		{ name: "Peach", rgb: [235,185,165] },
+		{ name: "Rose", rgb: [220,150,160] },
+		{ name: "Rustic Red", rgb: [185,105,75] },
+		{ name: "Muted Crimson", rgb: [170,70,70] },
+		{ name: "Warm Paper Brown", rgb: [210,180,150] },
+		{ name: "Sandstone", rgb: [205,190,170] },
+		{ name: "Cool Neutral", rgb: [210,215,225] },
+		{ name: "Cool Print Blue", rgb: [150,170,200] },
+		{ name: "Cinematic Cyan", rgb: [155,185,185] },
+		{ name: "Subtle Cyan", rgb: [170,200,200] },
+		{ name: "Deep Cyan Blue", rgb: [120,140,180] }
+	];
 
 var save = false;
 		
@@ -311,7 +313,6 @@ function displayDialog(settings, runmode) {
 	buttonSpacer.preferredSize = [1, 10];
 
 	var dialogSubmitted = false;
-	var dialogUsedDefaults = false;
 
 	var buttons = dialog.add( "group" );
 	buttons.spacing = 10;
@@ -323,15 +324,9 @@ function displayDialog(settings, runmode) {
 			dialog.close(1);
 		};
 	} else {
-		applyBtn.text = "Run";
+		applyBtn.text = "Run with These Settings";
 		applyBtn.onClick = function () {
 			dialogSubmitted = true;
-			dialog.close(1);
-		};
-		var defaultsBtn = buttons.add("button", undefined, "Run with Default Settings");
-		defaultsBtn.onClick = function () {
-			dialogUsedDefaults = true;
-			dialog.__useDefaults = true;
 			dialog.close(1);
 		};
 	}
@@ -342,22 +337,7 @@ function displayDialog(settings, runmode) {
 	var response = dialog.show();
 	if (response != 1) return null;
 	if (runmode === "edit" && !dialogSubmitted) return null;
-	if (runmode !== "edit" && !dialogSubmitted && !dialogUsedDefaults) return null;
-	if (dialog.__useDefaults === true) {
-		return {
-			"preflashr": pre_flash_r,
-			"preflashg": pre_flash_g,
-			"preflashb": pre_flash_b,
-			"preflashstrength": pre_flash_strength,
-			"blurradius": blur_radius,
-			"savestatus": save,
-			"savewhitepoint": preserve_whitepoint,
-			"saveblackpoint": preserve_blackpoint,
-			"preflashcoloramt": preflash_color_amount_setting,
-			"blackrestoreamt": blackpoint_restore_strength,
-			"whiterestoreamt": whitepoint_restore_strength
-		};
-	}
+	if (runmode !== "edit" && !dialogSubmitted) return null;
 
 	return {
 		"preflashr": coerceInteger(dialog.preflashR.text, pre_flash_r, 0, 255),
