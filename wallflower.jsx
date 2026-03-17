@@ -14,7 +14,7 @@
 var pre_flash_r = 182;
 var pre_flash_g = 96;
 var pre_flash_b = 44;
-var pre_flash_strength = 100;
+var pre_flash_strength = 30;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
 var preserve_whitepoint = true;
@@ -872,14 +872,24 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 		chromaLayer.name = "Preflash Chroma";
 		doc.activeLayer = chromaLayer;
 
-		// Strong, linear chroma ramp for predictable behavior.
-		var targetA = preflashColor.lab.a;
-		var targetB = preflashColor.lab.b;
+		// Normalize Lab a/b so preflash color mostly controls hue direction,
+		// while preflash_color_amount_setting controls chroma intensity.
+		var sourceA = preflashColor.lab.a;
+		var sourceB = preflashColor.lab.b;
+		var sourceChroma = Math.sqrt(sourceA * sourceA + sourceB * sourceB);
 		var colorAmountNorm = Math.max(0, Math.min(2, (preflash_color_amount_setting || 0) / 100));
+		var baseTargetChroma = 40;
+		var targetChroma = baseTargetChroma * colorAmountNorm;
+		var targetA = 0;
+		var targetB = 0;
+		if (sourceChroma > 0.0001) {
+			targetA = (sourceA / sourceChroma) * targetChroma;
+			targetB = (sourceB / sourceChroma) * targetChroma;
+		}
 		// Mild safeguard: softly roll off very high-strength chroma pushes.
 		var highStrengthRolloff = 1 - 0.28 * Math.pow(strengthNorm, 1.35);
 		if (highStrengthRolloff < 0.65) highStrengthRolloff = 0.65;
-		var deltaFactor = chromaScale * colorAmountNorm * highStrengthRolloff;
+		var deltaFactor = chromaScale * highStrengthRolloff;
 		var deltaA = Math.round(targetA * deltaFactor);
 		var deltaB = Math.round(targetB * deltaFactor);
 
