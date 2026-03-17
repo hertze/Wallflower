@@ -120,13 +120,13 @@ var save = false;
 /*
 // BEGIN__HARVEST_EXCEPTION_ZSTRING
 <javascriptresource>
-<name>Wallflower</name>
+<name>Wallflower 2</name>
 <menu>automate</menu>
 <enableinfo>true</enableinfo>
-<eventid>f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4</eventid>
+<eventid>1f4b8c3a-6d7e-4f2b-9c8a-2e3d4f5a6b7c</eventid>
 <terminology><![CDATA[<< /Version 1
 	/Events <<
-	/f3c2a1d9-8b7e-4c1f-9238-52e9d7f8b5b4 [(Wallflower) <<
+	/1f4b8c3a-6d7e-4f2b-9c8a-2e3d4f5a6b7c [(Wallflower 2) <<
 	/preflashr [(PreflashR) /integer]
 	/preflashg [(PreflashG) /integer]
 	/preflashb [(PreflashB) /integer]
@@ -136,6 +136,7 @@ var save = false;
 	/savewhitepoint [(SaveWhitePoint) /boolean]
 	/saveblackpoint [(SaveBlackPoint) /boolean]
 	/preflashcoloramt [(PreflashColorAmt) /integer]
+	/wholemaskgamma [(WholeMaskGamma) /string]
 	/blackrestoreamt [(BlackRestoreAmt) /integer]
 	/whiterestoreamt [(WhiteRestoreAmt) /integer]
 		>>]
@@ -164,7 +165,7 @@ function coerceInteger(value, fallback, minVal, maxVal) {
 function displayDialog(settings, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
-	dialog.text = "Wallflower";
+	dialog.text = "Wallflower 2";
 	dialog.orientation = "column";
 	dialog.alignChildren = ["fill", "top"];
 	dialog.spacing = 14;
@@ -241,7 +242,24 @@ function displayDialog(settings, runmode) {
 	dialog.preflashStrength = strengthGroup.add("edittext", undefined, (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength).toString());
 	dialog.preflashStrength.characters = 4;
 	try { dialog.preflashStrength.margins = [0,0,0,0]; } catch(e) {}
+	// Slider for Preflash Brightness (0-200)
+	dialog.preflashStrengthSlider = strengthGroup.add("slider", undefined, (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength), 0.0, 200.0);
+	try { dialog.preflashStrengthSlider.preferredSize = [220, 18]; } catch(e) {}
 	strengthGroup.add("statictext", undefined, "%");
+
+	// Sync slider <-> edittext
+	dialog.preflashStrengthSlider.onChanging = dialog.preflashStrengthSlider.onChange = function() {
+		var v = Math.round(this.value * 100) / 100;
+		dialog.preflashStrength.text = String(Math.round(v));
+	};
+	dialog.preflashStrength.onChange = function() {
+		var n = parseFloat(this.text);
+		if (isNaN(n)) n = pre_flash_strength;
+		if (n < 0) n = 0;
+		if (n > 200) n = 200;
+		dialog.preflashStrengthSlider.value = n;
+		this.text = String(Math.round(n));
+	};
 
 	var chromaGroup = preflashPanel.add("group");
 	chromaGroup.orientation = "row";
@@ -251,7 +269,52 @@ function displayDialog(settings, runmode) {
 	dialog.preflashColorAmount = chromaGroup.add("edittext", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting).toString());
 	dialog.preflashColorAmount.characters = 4;
 	try { dialog.preflashColorAmount.margins = [0,0,0,0]; } catch(e) {}
+	// Slider for Preflash Chroma (0-200)
+	dialog.preflashColorAmountSlider = chromaGroup.add("slider", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting), 0.0, 200.0);
+	try { dialog.preflashColorAmountSlider.preferredSize = [220, 18]; } catch(e) {}
 	chromaGroup.add("statictext", undefined, "%");
+
+	// Sync slider <-> edittext
+	dialog.preflashColorAmountSlider.onChanging = dialog.preflashColorAmountSlider.onChange = function() {
+		var v = Math.round(this.value * 100) / 100;
+		dialog.preflashColorAmount.text = String(Math.round(v));
+	};
+	dialog.preflashColorAmount.onChange = function() {
+		var n = parseFloat(this.text);
+		if (isNaN(n)) n = preflash_color_amount_setting;
+		if (n < 0) n = 0;
+		if (n > 200) n = 200;
+		dialog.preflashColorAmountSlider.value = n;
+		this.text = String(Math.round(n));
+	};
+
+	// Whole Mask Gamma slider (0.0 - 2.0)
+	var gammaGroup = preflashPanel.add("group");
+	gammaGroup.orientation = "row";
+	gammaGroup.spacing = 6;
+	gammaGroup.alignment = ["fill", "top"];
+	gammaGroup.add("statictext", undefined, "Mask Gamma");
+	var initialGamma = (settings.wholemaskgamma !== undefined ? parseFloat(settings.wholemaskgamma) : whole_mask_gamma);
+	if (isNaN(initialGamma)) initialGamma = whole_mask_gamma;
+	dialog.wholeMaskGammaText = gammaGroup.add("edittext", undefined, initialGamma.toFixed(2));
+	dialog.wholeMaskGammaText.characters = 5;
+	try { dialog.wholeMaskGammaText.margins = [0,0,0,0]; } catch(e) {}
+	dialog.wholeMaskGamma = gammaGroup.add("slider", undefined, initialGamma, 0.5, 1.5);
+	try { dialog.wholeMaskGamma.preferredSize = [220, 18]; } catch(e) {}
+
+	// Sync slider <-> edittext
+	dialog.wholeMaskGamma.onChanging = dialog.wholeMaskGamma.onChange = function() {
+		var v = Math.round(this.value * 100) / 100;
+		dialog.wholeMaskGammaText.text = v.toFixed(2);
+	};
+	dialog.wholeMaskGammaText.onChange = function() {
+		var n = parseFloat(this.text);
+		if (isNaN(n)) n = whole_mask_gamma;
+		if (n < 0) n = 0;
+		if (n > 2.0) n = 2.0;
+		dialog.wholeMaskGamma.value = n;
+		this.text = (Math.round(n * 100) / 100).toFixed(2);
+	};
 
  	var histogramBlurPanel = dialog.add("panel", undefined, "Histogram and Softening");
  	histogramBlurPanel.orientation = "column";
@@ -269,6 +332,23 @@ function displayDialog(settings, runmode) {
 	dialog.whiteRestoreAmount.characters = 4;
 	try { dialog.whiteRestoreAmount.margins = [0,0,0,0]; } catch(e) {}
 	try { dialog.whiteRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
+	// Slider for Preserve White Point restore strength (0-100)
+	dialog.whiteRestoreSlider = savewhiteGroup.add("slider", undefined, (settings.whiterestoreamt !== undefined ? settings.whiterestoreamt : whitepoint_restore_strength), 0.0, 100.0);
+	try { dialog.whiteRestoreSlider.preferredSize = [220, 18]; } catch(e) {}
+
+	// Sync slider <-> edittext
+	dialog.whiteRestoreSlider.onChanging = dialog.whiteRestoreSlider.onChange = function() {
+		var v = Math.round(this.value);
+		dialog.whiteRestoreAmount.text = v.toString();
+	};
+	dialog.whiteRestoreAmount.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = whitepoint_restore_strength;
+		if (n < 0) n = 0;
+		if (n > 100) n = 100;
+		dialog.whiteRestoreSlider.value = n;
+		this.text = n.toString();
+	};
 	var whitePctLabel = savewhiteGroup.add("statictext", undefined, "%");
 	try { whitePctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
 	dialog.savewhite.value = coerceBoolean(settings.savewhitepoint, preserve_whitepoint);
@@ -288,7 +368,24 @@ function displayDialog(settings, runmode) {
 	dialog.blackRestoreAmount.characters = 4;
 	try { dialog.blackRestoreAmount.margins = [0,0,0,0]; } catch(e) {}
 	try { dialog.blackRestoreAmount.margins = [0, 0, 0, 0]; } catch(e) {}
+	// Slider for Preserve Black Point restore strength (0-100)
+	dialog.blackRestoreSlider = saveblackGroup.add("slider", undefined, (settings.blackrestoreamt !== undefined ? settings.blackrestoreamt : blackpoint_restore_strength), 0.0, 100.0);
+	try { dialog.blackRestoreSlider.preferredSize = [220, 18]; } catch(e) {}
 	var blackPctLabel = saveblackGroup.add("statictext", undefined, "%");
+
+	// Sync slider <-> edittext
+	dialog.blackRestoreSlider.onChanging = dialog.blackRestoreSlider.onChange = function() {
+		var v = Math.round(this.value);
+		dialog.blackRestoreAmount.text = v.toString();
+	};
+	dialog.blackRestoreAmount.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = blackpoint_restore_strength;
+		if (n < 0) n = 0;
+		if (n > 100) n = 100;
+		dialog.blackRestoreSlider.value = n;
+		this.text = n.toString();
+	};
 	try { blackPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
 	dialog.saveblack.value = coerceBoolean(settings.saveblackpoint, preserve_blackpoint);
 	if (settings.blackrestoreamt !== undefined) {
@@ -305,6 +402,25 @@ function displayDialog(settings, runmode) {
 	dialog.blurRadius = blurGroup.add("edittext", undefined, (settings.blurradius !== undefined ? settings.blurradius : blur_radius).toString());
 	dialog.blurRadius.characters = 4;
 	try { dialog.blurRadius.margins = [0,0,0,0]; } catch(e) {}
+	// Slider for Softening amount (0-10) — integer steps
+	var initialBlur = (settings.blurradius !== undefined ? parseInt(settings.blurradius, 10) : blur_radius);
+	if (isNaN(initialBlur)) initialBlur = blur_radius;
+	dialog.blurRadiusSlider = blurGroup.add("slider", undefined, initialBlur, 0, 10);
+	try { dialog.blurRadiusSlider.preferredSize = [220, 18]; } catch(e) {}
+
+	// Sync slider <-> edittext (integer)
+	dialog.blurRadiusSlider.onChanging = dialog.blurRadiusSlider.onChange = function() {
+		var v = Math.round(this.value);
+		dialog.blurRadius.text = String(v);
+	};
+	dialog.blurRadius.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = blur_radius;
+		if (n < 0) n = 0;
+		if (n > 10) n = 10;
+		dialog.blurRadiusSlider.value = n;
+		this.text = String(n);
+	};
 
 	dialog.savestatus = dialog.add("checkbox", undefined, "Save and Close When Done");
 	dialog.savestatus.value = coerceBoolean(settings.savestatus, save);
@@ -349,6 +465,7 @@ function displayDialog(settings, runmode) {
 		"savewhitepoint": dialog.savewhite.value,
 		"saveblackpoint": dialog.saveblack.value,
 		"preflashcoloramt": coerceInteger(dialog.preflashColorAmount.text, preflash_color_amount_setting, 0, 200),
+		"wholemaskgamma": parseFloat(dialog.wholeMaskGammaText.text),
 		"blackrestoreamt": coerceInteger(dialog.blackRestoreAmount.text, blackpoint_restore_strength, 1, 100),
 		"whiterestoreamt": coerceInteger(dialog.whiteRestoreAmount.text, whitepoint_restore_strength, 1, 100)
 	};
@@ -370,6 +487,8 @@ function getSettings() {
 			d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
 			d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
 			d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
+			// Store wholemaskgamma as a string to preserve float precision
+			d.putString(stringIDToTypeID('wholemaskgamma'), String((result.wholemaskgamma !== undefined ? result.wholemaskgamma : whole_mask_gamma)));
 			d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
 			d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
 			app.playbackParameters = d;        
@@ -428,6 +547,20 @@ function getSettings() {
 			}
 		}
 		preflashcoloramt = normalizePercent(preflashcoloramt, preflash_color_amount_setting, 0, 200);
+		// Read wholemaskgamma (stored as integer*100 when saved from dialog)
+		var wholemaskgamma = undefined;
+		try { wholemaskgamma = app.playbackParameters.getInteger(stringIDToTypeID('wholemaskgamma')); } catch(e) {
+			try { wholemaskgamma = app.playbackParameters.getString(stringIDToTypeID('wholemaskgamma')); } catch(ee) { wholemaskgamma = undefined; }
+		}
+		var wholemaskgammaFloat = undefined;
+		if (wholemaskgamma !== undefined && wholemaskgamma !== null) {
+			var _wm = parseFloat(wholemaskgamma);
+			if (!isNaN(_wm)) {
+				// If stored as integer (e.g. 100 for 1.00), scale down
+				if (_wm > 4.0) _wm = _wm / 100.0;
+				wholemaskgammaFloat = Math.max(0.0, Math.min(4.0, _wm));
+			}
+		}
 		preflashr = normalizePercent(preflashr, pre_flash_r, 0, 255);
 		preflashg = normalizePercent(preflashg, pre_flash_g, 0, 255);
 		preflashb = normalizePercent(preflashb, pre_flash_b, 0, 255);
@@ -448,6 +581,7 @@ function getSettings() {
 					saveblackpoint: saveblack,
 					savewhitepoint: savewhite,
 					preflashcoloramt: preflashcoloramt,
+					wholemaskgamma: (wholemaskgammaFloat !== undefined ? wholemaskgammaFloat : whole_mask_gamma),
 					blackrestoreamt: blackrestoreamt,
 					whiterestoreamt: whiterestoreamt
 				}, "edit");
@@ -462,6 +596,8 @@ function getSettings() {
 				d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
 				d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
 				d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
+				// Store wholemaskgamma as a string to preserve float precision
+				d.putString(stringIDToTypeID('wholemaskgamma'), String((result.wholemaskgamma !== undefined ? result.wholemaskgamma : whole_mask_gamma)));
 				d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
 				d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
 				app.playbackParameters = d;
@@ -481,8 +617,9 @@ function getSettings() {
 				"savewhitepoint": savewhite,
 				"saveblackpoint": saveblack,
 				"preflashcoloramt": preflashcoloramt,
-			"blackrestoreamt": blackrestoreamt,
-			"whiterestoreamt": whiterestoreamt
+				"blackrestoreamt": blackrestoreamt,
+				"whiterestoreamt": whiterestoreamt,
+				"wholemaskgamma": (wholemaskgammaFloat !== undefined ? wholemaskgammaFloat : undefined)
 			};
 		}
 	}
@@ -528,6 +665,12 @@ function processSettings(runtimesettings) {
 			if (runtimesettings.whiterestoreamt !== undefined && runtimesettings.whiterestoreamt !== null) {
 				var _wp = parseInt(runtimesettings.whiterestoreamt); if (!isNaN(_wp)) whitepoint_restore_strength = _wp;
 			}
+
+				// Apply whole mask gamma if provided (float, expected 0.0 - 4.0; clamp to safe range)
+				if (runtimesettings.wholemaskgamma !== undefined && runtimesettings.wholemaskgamma !== null) {
+					var _wg = parseFloat(runtimesettings.wholemaskgamma);
+					if (!isNaN(_wg)) whole_mask_gamma = Math.max(0.25, Math.min(4.0, _wg));
+				}
 }
 
 function saveClose() {
