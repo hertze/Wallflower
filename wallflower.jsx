@@ -22,90 +22,33 @@ var whitepoint_restore_strength = 20; // 1–100: percentage to restore the orig
 var preserve_blackpoint = true;
 var blackpoint_restore_strength = 50; // 1–100: percentage to restore the original black point
 var preflash_color_amount_setting = 30; // 0-200: preflash chroma amount (100 = current baseline)
-
-var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
-
-var microSmooth_strength = 50; // opacity percentage for the micro-smoothing layer (0..100)
-
-var preflash_auto_samples = 5; // grid samples per axis (5x5)
-var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
-
 var whole_mask_reach = 255; // how far the whole mask extends (lower = more localized to shadows)
-var highlight_mask_gamma = 1.0; // gamma to bias highlight mask when building (lower = more midtone coverage)
 var whole_mask_gamma = 1.0; // gamma to bias whole mask when building (lower = more midtone coverage)
+
+// Hard coded settings for the algorithm (not exposed in the UI)
+var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
+var microSmooth_strength = 50; // opacity percentage for the micro-smoothing layer (0..100)
+var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
+var highlight_mask_gamma = 1.0; // gamma to bias highlight mask when building (lower = more midtone coverage)
 var paper_response_mask_gamma = 0.65; // stronger toe weighting for print-response smoothing
 var paper_response_mask_range_end = 192; // extend into lower mids but keep upper mids/highlights cleaner
-
-// Preflash tuning
-// - `preflash_damp_max` (0..1): overall exposure/contrast damping applied
-//   by the preflash. Think of this as global "fill" applied before tonal
-//   shaping — higher values increase the amount of darkening applied to
-//   shadows and midtones. Use lower values to preserve overall contrast.
-// - `preflash_blackcomp_max` (0..255): extra black-point pull applied near
-//   the toe of the mapping. This controls shadow compression/crush —
-//   increase to deepen blacks, reduce to keep shadow detail.
-// - `preflash_mid_blend` (0..1): blends the aggressive compensation result
-//   with a gentler damped mapping for midtones. Values closer to 1
-//   preserve midtone separation; values near 0 favor stronger shadow
-//   correction.
-// - `preflash_min_factor` (0..1): hard floor for the tone multiplier so the
-//   darkest tones never collapse to absolute black. Acts as a safety net
-//   when using aggressive preflash strengths.
-//
-// Note: black/white "restore" after compensation now uses a Levels-based
-// mapping (not additional curve anchors). See the restoration settings
-// below for detection and strength controls.
-var preflash_damp_max = 0.6;
-var preflash_blackcomp_max = 40;
-var preflash_mid_blend = 0.7;
-var preflash_min_factor = 0.35;
-var preflash_lift_max = 52; // max Lightness lift in upper tones at strength=100
-var preflash_black_lift_max = 40; // max blackpoint lift at strength=100
-var preflash_comp_midtone_max = 26; // max midtone pullback after lift
-var preflash_comp_highlight_max = 38; // max highlight pullback after lift
-
-// Black / white point detection and restoration (how to think in photo terms)
-// - `blackpoint_threshold_fraction`: fraction of image pixels used to decide
-//   where the true black point sits. Use a small value (e.g. 0.003) to find
-//   the darkest "real" pixels and ignore isolated noise or clipping. Increase
-//   this for very noisy or textured shadows so the detector ignores tiny
-//   specks.
-// - `blackpoint_tolerance`: minimum histogram-bin difference (in L bins)
-//   required before we attempt to restore the black point. Prevents tiny
-//   measurement noise from triggering a restore. ~2 is a good default.
-// - `blackpoint_restore_strength` (1–100): percentage to restore blacks back
-//   toward their original position after compensation. Lower values give
-//   softer corrections with fewer midtone side-effects.
-// - `whitepoint_threshold_fraction`: similar to black threshold but scans
-//   from the top of the histogram. Keep it tight (small) so specular highlights
-//   don't dominate the measurement; it helps recover highlight roll-off rather
-//   than specular clipping.
-// - `whitepoint_tolerance`: minimum bin gap to require before restoring
-//   highlights. Prevents unnecessary tiny shifts.
-// - `whitepoint_restore_strength` (1–100): percentage to restore whites back
-//   toward their original position. Lower values give subtler highlight
-//   recovery.
-var blackpoint_threshold_fraction = 0.003;  // fraction of pixels to consider 'significant' (5%)
-var blackpoint_tolerance = 2; // bins; only remap when initial black is at least this brighter than post-curve
-var whitepoint_threshold_fraction = 0.003; // tight (0.1%) - finds the actual top-end occupied bin, not clipped specular
-var whitepoint_tolerance = 2; // bins; only remap when post-curve white is at least this brighter than original
 
 
 // Preflash color presets (name + RGB). Selecting a preset will populate the RGB fields below.
 var _presets = [
-	{ name: "Paper Warmth", rgb: [235,232,225] },
-	{ name: "RA-4 Yellow Bias", rgb: [235,220,170] },
-	{ name: "Aged Paper", rgb: [220,205,160] },
-	{ name: "Amber Filtration", rgb: [225,170,95] },
-	{ name: "Highlight Peach", rgb: [235,185,165] },
-	{ name: "Magenta Bias", rgb: [220,150,160] },
-	{ name: "Crossover Magenta", rgb: [170,70,70] },
-	{ name: "Paper Base Warm", rgb: [205,190,170] },
-	{ name: "Cool Neutral", rgb: [210,215,225] },
-	{ name: "Cool Print Bias", rgb: [150,170,200] },
-	{ name: "Cyan Crossover", rgb: [155,185,185] },
-	{ name: "Subtle Cyan Shift", rgb: [170,200,200] },
-	{ name: "Deep Cool Shift", rgb: [130,150,180] }
+	{ name: "Cream", rgb: [235,232,225] },
+	{ name: "Yellow", rgb: [235,220,170] },
+	{ name: "Tan", rgb: [220,205,160] },
+	{ name: "Amber", rgb: [225,170,95] },
+	{ name: "Peach", rgb: [235,185,165] },
+	{ name: "Magenta", rgb: [220,150,160] },
+	{ name: "Maroon", rgb: [170,70,70] },
+	{ name: "Beige", rgb: [205,190,170] },
+	{ name: "Gray", rgb: [210,215,225] },
+	{ name: "Cyan", rgb: [150,170,200] },
+	{ name: "Teal", rgb: [155,185,185] },
+	{ name: "Aqua", rgb: [170,200,200] },
+	{ name: "Indigo", rgb: [130,150,180] }
 ];
 
 var save = false;
@@ -243,7 +186,7 @@ function displayDialog(settings, runmode) {
 	dialog.preflashStrength.characters = 4;
 	try { dialog.preflashStrength.margins = [0,0,0,0]; } catch(e) {}
 	// Slider for Preflash Brightness (0-200)
-	dialog.preflashStrengthSlider = strengthGroup.add("slider", undefined, (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength), 0.0, 200.0);
+	dialog.preflashStrengthSlider = strengthGroup.add("slider", undefined, (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength), 0.0, 100.0);
 	try { dialog.preflashStrengthSlider.preferredSize = [220, 18]; } catch(e) {}
 	strengthGroup.add("statictext", undefined, "%");
 
@@ -270,7 +213,7 @@ function displayDialog(settings, runmode) {
 	dialog.preflashColorAmount.characters = 4;
 	try { dialog.preflashColorAmount.margins = [0,0,0,0]; } catch(e) {}
 	// Slider for Preflash Chroma (0-200)
-	dialog.preflashColorAmountSlider = chromaGroup.add("slider", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting), 0.0, 200.0);
+	dialog.preflashColorAmountSlider = chromaGroup.add("slider", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting), 0.0, 100.0);
 	try { dialog.preflashColorAmountSlider.preferredSize = [220, 18]; } catch(e) {}
 	chromaGroup.add("statictext", undefined, "%");
 
@@ -299,7 +242,7 @@ function displayDialog(settings, runmode) {
 	rangeGroup.orientation = "row";
 	rangeGroup.spacing = 6;
 	rangeGroup.alignment = ["fill", "top"];
-	rangeGroup.add("statictext", undefined, "Range");
+	rangeGroup.add("statictext", undefined, "Mask Range");
 	var initialReach = (settings.wholemaskreach !== undefined ? coerceInteger(settings.wholemaskreach, whole_mask_reach, 0, 255) : whole_mask_reach);
 	if (isNaN(initialReach)) initialReach = whole_mask_reach;
 	dialog.wholeMaskReachText = rangeGroup.add("edittext", undefined, String(initialReach));
@@ -327,7 +270,7 @@ function displayDialog(settings, runmode) {
 	gammaGroup.orientation = "row";
 	gammaGroup.spacing = 6;
 	gammaGroup.alignment = ["fill", "top"];
-	gammaGroup.add("statictext", undefined, "Mask Gamma");
+	gammaGroup.add("statictext", undefined, "Mask Density (Gamma)");
 	var initialGamma = (settings.wholemaskgamma !== undefined ? parseFloat(settings.wholemaskgamma) : whole_mask_gamma);
 	if (isNaN(initialGamma)) initialGamma = whole_mask_gamma;
 	dialog.wholeMaskGammaText = gammaGroup.add("edittext", undefined, initialGamma.toFixed(2));
@@ -749,18 +692,17 @@ function saveClose() {
 }
 
 // Top-level analyzer: estimate shadow pixel ratio by sampling a grid
-function estimateShadowRatio(samplesPerAxis, threshold) {
+function estimateShadowRatio(threshold) {
 // Use channel histograms to estimate the fraction of dark pixels.
-// This avoids creating ColorSamplers (the color picker) which can be slow
-// and intrusive. We approximate dark pixels as those with channel values
-// below `threshold` across R/G/B by averaging per-channel cumulative counts.
+// We approximate dark pixels as those with channel values below `threshold`
+// across R/G/B by averaging per-channel cumulative counts.
 	try {
 		var d = app.activeDocument;
 		var totalPixels = d.width.as("px") * d.height.as("px");
 		var rHist = d.channels[0].histogram;
 		var gHist = d.channels[1].histogram;
 		var bHist = d.channels[2].histogram;
-		var t = Math.max(0, Math.min(255, Math.round(threshold)));
+			var t = Math.max(0, Math.min(255, Math.round(threshold)));
 		var sumR = 0, sumG = 0, sumB = 0;
 		for (var i = 0; i <= t; i++) {
 			sumR += rHist[i] || 0;
@@ -775,7 +717,7 @@ function estimateShadowRatio(samplesPerAxis, threshold) {
 }
 
 function autoAdjustPreflashStrength(origStrength) {
-	var ratio = estimateShadowRatio(preflash_auto_samples, preflash_shadow_threshold);
+	var ratio = estimateShadowRatio(preflash_shadow_threshold);
 	// Bias toward brighter images by using 0.4 as the neutral center
 	var biasCenter = 0.3;
 	var m = 1 + (1.5 * (biasCenter - ratio));
@@ -868,35 +810,6 @@ function computeMaskCoverage(channelName) {
 	}
 }
 
-// Compute the last 'significant' white histogram bin (0..255) scanning from the top.
-// Use a tight thresholdFraction (e.g. 0.001) so specular-clipped bins don't dominate.
-function computeImageWhitePoint(thresholdFraction) {
-	try {
-		var d = app.activeDocument;
-		var totalPixels = d.width.as("px") * d.height.as("px");
-		var threshold = Math.max(0, Math.min(1, (thresholdFraction !== undefined) ? thresholdFraction : whitepoint_threshold_fraction));
-		var cumulative = 0;
-		if (d.mode === DocumentMode.LAB) {
-			var lHist = d.channels.getByName(lightness_channel_name).histogram;
-			for (var i = 255; i >= 0; i--) {
-				cumulative += (lHist[i] || 0);
-				if (totalPixels && (cumulative / totalPixels) >= threshold) return i;
-			}
-		} else {
-			var rHist = d.channels[0].histogram;
-			var gHist = d.channels[1].histogram;
-			var bHist = d.channels[2].histogram;
-			for (var i = 255; i >= 0; i--) {
-				var avg = ((rHist[i] || 0) + (gHist[i] || 0) + (bHist[i] || 0)) / 3.0;
-				cumulative += avg;
-				if (totalPixels && (cumulative / totalPixels) >= threshold) return i;
-			}
-		}
-		return 0;
-	} catch (e) {
-		return 0;
-	}
-}
 function softenImage(layer, radius) {
 	var doc = app.activeDocument;
 	var originalLayer = doc.activeLayer;
@@ -976,9 +889,9 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 	function computeToneParams() {
 		// Keep chroma scaling, but simplify Lightness response to a near-linear, exposure-like curve.
 		var chromaScaleMax = 1.25;
-		var highStrengthRoll = Math.pow(clamp01((strengthNorm - 0.82) / 0.18), 1.35);
-		var topEndLimiter = 1 - 0.24 * highStrengthRoll;
-		var chromaScale = chromaScaleMax * strengthNorm * topEndLimiter;
+		// Decouple chroma from preflash strength: use preflash_color_amount_setting
+		var colorAmountNorm = Math.max(0, Math.min(2, (preflash_color_amount_setting || 0) / 100));
+		var chromaScale = chromaScaleMax * colorAmountNorm;
 		var chromaNorm = chromaScale / chromaScaleMax;
 
 		// Endpoints: preserve mode keeps anchors fixed at 0/255.
@@ -1113,10 +1026,9 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 			targetA = (sourceA / sourceChroma) * targetChroma;
 			targetB = (sourceB / sourceChroma) * targetChroma;
 		}
-		// Mild safeguard: softly roll off very high-strength chroma pushes.
-		var highStrengthRolloff = 1 - 0.28 * Math.pow(strengthNorm, 1.35);
-		if (highStrengthRolloff < 0.65) highStrengthRolloff = 0.65;
-		var deltaFactor = chromaScale * highStrengthRolloff;
+		// Chroma magnitude is controlled solely by the provided chromaScale
+		// (driven by `preflash_color_amount_setting`). Do not roll off based on strength.
+		var deltaFactor = chromaScale;
 		var deltaA = Math.round(targetA * deltaFactor);
 		var deltaB = Math.round(targetB * deltaFactor);
 
@@ -1129,9 +1041,11 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 			// Paper-like chroma response: strongest in lower mids/mids,
 			// reduced in deep shadows and especially near highlights.
 			// Stronger high-strength behavior: progressively desaturate shadows.
-			var shadowAtten = Math.max(0.10, 1 - 0.90 * Math.pow(strengthNorm, 1.45));
-			var lowerMidAtten = Math.max(0.30, 1 - 0.70 * Math.pow(strengthNorm, 1.25));
-			var midAtten = Math.max(0.78, 1 - 0.22 * strengthNorm);
+			// Use fixed paper-response attenuations so chroma behavior is independent
+			// of preflash strength; these values give a sensible rolloff across tones.
+			var shadowAtten = 0.60;
+			var lowerMidAtten = 0.90;
+			var midAtten = 1.00;
 			var d0 = Math.round(delta * 0.30 * shadowAtten);
 			var d64 = Math.round(delta * (0.72 + 0.08 * paperResponseCoverage) * lowerMidAtten);
 			var d128 = Math.round(delta * 1.00 * midAtten);
