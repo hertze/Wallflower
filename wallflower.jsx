@@ -626,6 +626,7 @@ dialog.halationStrengthText.characters = 4;
 try { dialog.halationStrengthText.margins = [0,0,0,0]; } catch(e) {}
 dialog.halationStrengthSlider = strengthGroupH.add("slider", undefined, (settings.halationstrength !== undefined ? settings.halationstrength : halation_strength), 0, 100);
 try { dialog.halationStrengthSlider.preferredSize = [220, 18]; } catch(e) {}
+strengthGroupH.add("statictext", undefined, "%");
 
 dialog.halationStrengthSlider.onChanging = dialog.halationStrengthSlider.onChange = function() {
 	var v = Math.round(this.value);
@@ -806,6 +807,7 @@ dialog.halationBloomText.onChange = function() {
 	try { dialog.grainStrengthText.margins = [0,0,0,0]; } catch(e) {}
 	dialog.grainStrengthSlider = grainStrengthGroup.add("slider", undefined, (settings.grainstrength !== undefined ? settings.grainstrength : grain_strength), 0, 100);
 	try { dialog.grainStrengthSlider.preferredSize = [220, 18]; } catch(e) {}
+	grainStrengthGroup.add("statictext", undefined, "%");
 
 	dialog.grainStrengthSlider.onChanging = dialog.grainStrengthSlider.onChange = function() {
 		var v = Math.round(this.value);
