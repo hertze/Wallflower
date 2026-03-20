@@ -11,9 +11,9 @@
 
 // Default settings ------------------------------------------------------------
 
-var pre_flash_r = 255;
-var pre_flash_g = 246;
-var pre_flash_b = 232;
+var pre_flash_r = 235;
+var pre_flash_g = 232;
+var pre_flash_b = 225;
 var pre_flash_strength = 30;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
@@ -23,13 +23,13 @@ var preserve_blackpoint = true;
 var blackpoint_restore_strength = 50; // 1–100: percentage to restore the original black point
 var preflash_color_amount_setting = 30; // 0-200: preflash chroma amount (100 = current baseline)
 var whole_mask_reach = 255; // how far the whole mask extends (lower = more localized to shadows)
-var whole_mask_gamma = 1.0; // gamma to bias whole mask when building (lower = more midtone coverage)
+var whole_mask_gamma = 0.9; // gamma to bias whole mask when building (lower = more midtone coverage)
 
 // Hard coded settings for the algorithm (not exposed in the UI)
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
 var microSmooth_strength = 50; // opacity percentage for the micro-smoothing layer (0..100)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
-var highlight_mask_gamma = 1.0; // gamma to bias highlight mask when building (lower = more midtone coverage)
+var highlight_mask_gamma = 0.9; // gamma to bias highlight mask when building (lower = more midtone coverage)
 var paper_response_mask_gamma = 0.65; // stronger toe weighting for print-response smoothing
 var paper_response_mask_range_end = 192; // extend into lower mids but keep upper mids/highlights cleaner
 
@@ -117,13 +117,91 @@ function displayDialog(settings, runmode) {
 	settings = settings || {};
 	runmode = runmode || "normal";
 
- 	var preflashPanel = dialog.add("panel", undefined, "Preflash Brightness and Chroma");
+	// Baseline L for Lab conversions (derived from initial/preexisting RGB)
+	var _initR = (settings.preflashr !== undefined ? settings.preflashr : pre_flash_r);
+	var _initG = (settings.preflashg !== undefined ? settings.preflashg : pre_flash_g);
+	var _initB = (settings.preflashb !== undefined ? settings.preflashb : pre_flash_b);
+	var _baselineColor = new SolidColor();
+	_baselineColor.rgb.red = _initR;
+	_baselineColor.rgb.green = _initG;
+	_baselineColor.rgb.blue = _initB;
+	var baselineL = _baselineColor.lab.l;
+
+	// Helper: update the small color swatch in the UI
+	function setSwatchRGB(r, g, b) {
+		try {
+			var rr = Math.max(0, Math.min(255, Math.round(r || 0)));
+			var gg = Math.max(0, Math.min(255, Math.round(g || 0)));
+			var bb = Math.max(0, Math.min(255, Math.round(b || 0)));
+			if (dialog && dialog.colorSwatch && dialog.colorSwatch.graphics) {
+				dialog.colorSwatch.graphics.backgroundColor = dialog.colorSwatch.graphics.newBrush(dialog.colorSwatch.graphics.BrushType.SOLID_COLOR, [rr/255, gg/255, bb/255]);
+			}
+		} catch (e) {}
+	}
+
+	// Helper: update swatch and RGB fields from brightness percent (0-200)
+	function updateSwatchFromBrightness(brightPct) {
+		try {
+			// Simply refresh the preview using current angle/chroma but taking brightness into account
+			var ang = parseInt(dialog.preflashAngle && dialog.preflashAngle.text ? dialog.preflashAngle.text : 0, 10) || 0;
+			try { updateColorFromAngle(ang); } catch(e) {}
+		} catch (e) {}
+	}
+
+	// Helper: when user types RGB manually, compute Lab and update angle/chroma/brightness sliders
+	function syncRGBtoSliders(r, g, b) {
+		try {
+			var tmp = new SolidColor(); tmp.rgb.red = r; tmp.rgb.green = g; tmp.rgb.blue = b;
+			var a = tmp.lab.a; var bb = tmp.lab.b; var L = tmp.lab.l;
+			var ang = Math.atan2(bb, a) * 180.0 / Math.PI; if (isNaN(ang)) ang = 0; ang = Math.round((ang + 360) % 360);
+			var chroma = Math.sqrt(a*a + bb*bb);
+			var baseTargetChroma = 80;
+			var pct = Math.round((chroma / baseTargetChroma) * 100);
+			if (isNaN(pct)) pct = 0; if (pct < 0) pct = 0; if (pct > 200) pct = 200;
+			var defaultStrength = (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength);
+			var brightPct = defaultStrength;
+			if (baselineL && baselineL > 0) brightPct = Math.round(defaultStrength * (L / baselineL));
+			if (isNaN(brightPct)) brightPct = defaultStrength;
+			if (brightPct < 0) brightPct = 0; if (brightPct > 200) brightPct = 200;
+			// Suspend handlers to avoid recursive updates
+			var a1,s1,s1c,a2,s2,s2c,a3,s3,s3c;
+			try {
+				a1 = dialog.preflashAngle.onChange; s1 = dialog.preflashAngleSlider.onChange; s1c = dialog.preflashAngleSlider.onChanging;
+				a2 = dialog.preflashColorAmount.onChange; s2 = dialog.preflashColorAmountSlider.onChange; s2c = dialog.preflashColorAmountSlider.onChanging;
+				a3 = dialog.preflashStrength.onChange; s3 = dialog.preflashStrengthSlider.onChange; s3c = dialog.preflashStrengthSlider.onChanging;
+				try { dialog.preflashAngle.onChange = null; } catch(e) {}
+				try { dialog.preflashAngleSlider.onChange = null; dialog.preflashAngleSlider.onChanging = null; } catch(e) {}
+				try { dialog.preflashColorAmount.onChange = null; } catch(e) {}
+				try { dialog.preflashColorAmountSlider.onChange = null; dialog.preflashColorAmountSlider.onChanging = null; } catch(e) {}
+				try { dialog.preflashStrength.onChange = null; } catch(e) {}
+				try { dialog.preflashStrengthSlider.onChange = null; dialog.preflashStrengthSlider.onChanging = null; } catch(e) {}
+			} catch(e) {}
+			// Apply values
+			try { dialog.preflashAngleSlider.value = ang; } catch(e) {}
+			try { dialog.preflashAngle.text = String(ang); } catch(e) {}
+			try { dialog.preflashColorAmountSlider.value = pct; } catch(e) {}
+			try { dialog.preflashColorAmount.text = String(pct); } catch(e) {}
+			try { dialog.preflashStrengthSlider.value = brightPct; } catch(e) {}
+			try { dialog.preflashStrength.text = String(brightPct); } catch(e) {}
+			// Restore handlers
+			try { dialog.preflashAngle.onChange = a1; dialog.preflashAngleSlider.onChange = s1; dialog.preflashAngleSlider.onChanging = s1c; } catch(e) {}
+			try { dialog.preflashColorAmount.onChange = a2; dialog.preflashColorAmountSlider.onChange = s2; dialog.preflashColorAmountSlider.onChanging = s2c; } catch(e) {}
+			try { dialog.preflashStrength.onChange = a3; dialog.preflashStrengthSlider.onChange = s3; dialog.preflashStrengthSlider.onChanging = s3c; } catch(e) {}
+		} catch(e) {}
+		return ang;
+	}
+
+ 	var preflashPanel = dialog.add("panel", undefined, "Preflash Color");
  	preflashPanel.orientation = "column";
  	preflashPanel.alignChildren = ["fill", "top"];
 	preflashPanel.margins = 14;
 	preflashPanel.spacing = 10;
 
+
+
+	// Build preset dropdown list (with placeholder)
 	var presetNames = [];
+	presetNames.push("--Color Presets"); // placeholder at index 0
 	for (var pi = 0; pi < _presets.length; pi++) presetNames.push(_presets[pi].name);
 	var presetDropdown = preflashPanel.add("dropdownlist", undefined, presetNames);
 	try {
@@ -132,51 +210,53 @@ function displayDialog(settings, runmode) {
 		// Use a slightly larger font so items render with increased row height
 		try { presetDropdown.graphics.font = ScriptUI.newFont(presetDropdown.graphics.font.name, presetDropdown.graphics.font.style, 13); } catch(e) {}
 	} catch(e) {}
-	presetDropdown.selection = 0;
+	presetDropdown.selection = 0; // keep placeholder selected by default
 
-	var rgbGroup = preflashPanel.add("group");
-	rgbGroup.orientation = "row";
-	rgbGroup.spacing = 6;
-	rgbGroup.alignment = ["fill", "top"];
-	rgbGroup.add("statictext", undefined, "Preflash Color (RGB)");
-	rgbGroup.add("statictext", undefined, "R:");
-	dialog.preflashR = rgbGroup.add("edittext", undefined, (settings.preflashr !== undefined ? settings.preflashr : pre_flash_r).toString());
-	dialog.preflashR.characters = 3;
-	try { dialog.preflashR.margins = [0,0,0,0]; } catch(e) {}
-	rgbGroup.add("statictext", undefined, "G:");
-	dialog.preflashG = rgbGroup.add("edittext", undefined, (settings.preflashg !== undefined ? settings.preflashg : pre_flash_g).toString());
-	dialog.preflashG.characters = 3;
-	try { dialog.preflashG.margins = [0,0,0,0]; } catch(e) {}
-	rgbGroup.add("statictext", undefined, "B:");
-	dialog.preflashB = rgbGroup.add("edittext", undefined, (settings.preflashb !== undefined ? settings.preflashb : pre_flash_b).toString());
-	dialog.preflashB.characters = 3;
-	try { dialog.preflashB.margins = [0,0,0,0]; } catch(e) {}
+// Hue angle control (0-360°) — placed after the preset dropdown
+var angleGroup = preflashPanel.add("group");
+angleGroup.orientation = "row";
+angleGroup.spacing = 6;
+angleGroup.alignment = ["fill", "top"];
+angleGroup.add("statictext", undefined, "Hue Angle");
+dialog.preflashAngle = angleGroup.add("edittext", undefined, "0");
+dialog.preflashAngle.characters = 4;
+try { dialog.preflashAngle.margins = [0,0,0,0]; } catch(e) {}
+dialog.preflashAngleSlider = angleGroup.add("slider", undefined, 0, 0, 360);
+try { dialog.preflashAngleSlider.preferredSize = [220, 18]; } catch(e) {}
+angleGroup.add("statictext", undefined, "°");
 
-	// After RGB fields exist, try to initialize the preset dropdown to match the current RGB.
-	(function initPresetSelection() {
-		var curR = coerceInteger(settings.preflashr !== undefined ? settings.preflashr : pre_flash_r, pre_flash_r, 0, 255);
-		var curG = coerceInteger(settings.preflashg !== undefined ? settings.preflashg : pre_flash_g, pre_flash_g, 0, 255);
-		var curB = coerceInteger(settings.preflashb !== undefined ? settings.preflashb : pre_flash_b, pre_flash_b, 0, 255);
-		for (var i = 0; i < _presets.length; i++) {
-			var p = _presets[i].rgb;
-			if (p[0] === curR && p[1] === curG && p[2] === curB) {
-				presetDropdown.selection = i;
-				return;
-			}
-		}
-	})();
+// Preflash Chroma (moved to follow Hue Angle)
+var chromaGroup = preflashPanel.add("group");
+chromaGroup.orientation = "row";
+chromaGroup.spacing = 6;
+chromaGroup.alignment = ["fill", "top"];
+chromaGroup.add("statictext", undefined, "Preflash Chroma");
+dialog.preflashColorAmount = chromaGroup.add("edittext", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting).toString());
+dialog.preflashColorAmount.characters = 4;
+try { dialog.preflashColorAmount.margins = [0,0,0,0]; } catch(e) {}
+// Slider for Preflash Chroma (0-200)
+dialog.preflashColorAmountSlider = chromaGroup.add("slider", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting), 0.0, 100.0);
+try { dialog.preflashColorAmountSlider.preferredSize = [220, 18]; } catch(e) {}
+chromaGroup.add("statictext", undefined, "%");
 
-	// Wire preset selection to populate the RGB edit fields when the user changes it.
-	presetDropdown.onChange = function() {
-		try {
-			var sel = presetDropdown.selection.index;
-			var rgb = _presets[sel].rgb;
-			dialog.preflashR.text = String(rgb[0]);
-			dialog.preflashG.text = String(rgb[1]);
-			dialog.preflashB.text = String(rgb[2]);
-		} catch(e) {}
-	};
+// Sync slider <-> edittext
+dialog.preflashColorAmountSlider.onChanging = dialog.preflashColorAmountSlider.onChange = function() {
+	var v = Math.round(this.value * 100) / 100;
+	dialog.preflashColorAmount.text = String(Math.round(v));
+	// Update RGB preview from current angle when chroma changes
+	try { updateColorFromAngle(parseInt(dialog.preflashAngle.text, 10) || 0); } catch(e) {}
+};
+dialog.preflashColorAmount.onChange = function() {
+	var n = parseFloat(this.text);
+	if (isNaN(n)) n = preflash_color_amount_setting;
+	if (n < 0) n = 0;
+	if (n > 200) n = 200;
+	dialog.preflashColorAmountSlider.value = n;
+	this.text = String(Math.round(n));
+	try { updateColorFromAngle(parseInt(dialog.preflashAngle.text, 10) || 0); } catch(e) {}
+};
 
+	// Preflash Brightness (placed below Chroma)
 	var strengthGroup = preflashPanel.add("group");
 	strengthGroup.orientation = "row";
 	strengthGroup.spacing = 6;
@@ -194,6 +274,8 @@ function displayDialog(settings, runmode) {
 	dialog.preflashStrengthSlider.onChanging = dialog.preflashStrengthSlider.onChange = function() {
 		var v = Math.round(this.value * 100) / 100;
 		dialog.preflashStrength.text = String(Math.round(v));
+		// Update preview using unified logic
+		try { updateSwatchFromBrightness(v); } catch(e) {}
 	};
 	dialog.preflashStrength.onChange = function() {
 		var n = parseFloat(this.text);
@@ -202,34 +284,205 @@ function displayDialog(settings, runmode) {
 		if (n > 200) n = 200;
 		dialog.preflashStrengthSlider.value = n;
 		this.text = String(Math.round(n));
+		try { updateSwatchFromBrightness(n); } catch(e) {}
 	};
 
-	var chromaGroup = preflashPanel.add("group");
-	chromaGroup.orientation = "row";
-	chromaGroup.spacing = 6;
-	chromaGroup.alignment = ["fill", "top"];
-	chromaGroup.add("statictext", undefined, "Preflash Chroma");
-	dialog.preflashColorAmount = chromaGroup.add("edittext", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting).toString());
-	dialog.preflashColorAmount.characters = 4;
-	try { dialog.preflashColorAmount.margins = [0,0,0,0]; } catch(e) {}
-	// Slider for Preflash Chroma (0-200)
-	dialog.preflashColorAmountSlider = chromaGroup.add("slider", undefined, (settings.preflashcoloramt !== undefined ? settings.preflashcoloramt : preflash_color_amount_setting), 0.0, 100.0);
-	try { dialog.preflashColorAmountSlider.preferredSize = [220, 18]; } catch(e) {}
-	chromaGroup.add("statictext", undefined, "%");
+// Helper: update RGB fields from an angle and current chroma setting
+function updateColorFromAngle(angleDeg) {
+	try {
+		var aRad = (angleDeg % 360) * Math.PI / 180.0;
+		var colorAmountVal = preflash_color_amount_setting;
+		try { colorAmountVal = parseFloat(dialog.preflashColorAmount.text); } catch(e) {}
+		if (isNaN(colorAmountVal)) colorAmountVal = preflash_color_amount_setting;
+		var colorAmountNorm = Math.max(0, Math.min(2, colorAmountVal / 100));
+		var baseTargetChroma = 80;
+		var targetChroma = baseTargetChroma * colorAmountNorm;
 
-	// Sync slider <-> edittext
-	dialog.preflashColorAmountSlider.onChanging = dialog.preflashColorAmountSlider.onChange = function() {
-		var v = Math.round(this.value * 100) / 100;
-		dialog.preflashColorAmount.text = String(Math.round(v));
+	        // Determine target Lab L from current brightness setting so brightness and chroma combine
+	        var brightPct = pre_flash_strength;
+	        try { brightPct = parseFloat(dialog.preflashStrength.text); } catch(e) {}
+	        if (isNaN(brightPct)) brightPct = pre_flash_strength;
+	        var defaultStrength = (settings.preflashstrength !== undefined ? settings.preflashstrength : pre_flash_strength);
+	        if (!defaultStrength || defaultStrength <= 0) defaultStrength = pre_flash_strength;
+	        var Ltarget = baselineL * (brightPct / defaultStrength);
+	        if (isNaN(Ltarget)) Ltarget = baselineL;
+	        if (Ltarget < 0) Ltarget = 0;
+	        if (Ltarget > 100) Ltarget = 100;
+
+			// Compute a/b from angle and targetChroma, but reduce chroma if Lab->RGB is out-of-gamut
+			var targetChromaAdj = targetChroma;
+			var tmpCol = new SolidColor();
+			var a = 0, b = 0;
+			var attempts = 0;
+			var maxAttempts = 30;
+			while (attempts < maxAttempts) {
+				a = Math.round(Math.cos(aRad) * targetChromaAdj);
+				b = Math.round(Math.sin(aRad) * targetChromaAdj);
+				tmpCol.lab.l = Ltarget;
+				tmpCol.lab.a = a;
+				tmpCol.lab.b = b;
+				// Check if RGB is inside gamut
+				try {
+					var rr = Math.round(tmpCol.rgb.red);
+					var gg = Math.round(tmpCol.rgb.green);
+					var bb = Math.round(tmpCol.rgb.blue);
+					if (rr >= 0 && rr <= 255 && gg >= 0 && gg <= 255 && bb >= 0 && bb <= 255) {
+						break;
+					}
+				} catch (e) {
+					// conversion may throw; fall back to reducing chroma
+				}
+				// reduce chroma and retry
+				targetChromaAdj *= 0.92;
+				attempts++;
+			}
+		// Populate RGB fields (clamped/rounded)
+		dialog.preflashR.text = String(Math.round(tmpCol.rgb.red));
+		dialog.preflashG.text = String(Math.round(tmpCol.rgb.green));
+		dialog.preflashB.text = String(Math.round(tmpCol.rgb.blue));
+		// Update swatch
+		setSwatchRGB(tmpCol.rgb.red, tmpCol.rgb.green, tmpCol.rgb.blue);
+	} catch (e) {}
+}
+
+// Angle slider ↔ edittext
+dialog.preflashAngleSlider.onChanging = dialog.preflashAngleSlider.onChange = function() {
+	var v = Math.round(this.value);
+	dialog.preflashAngle.text = v.toString();
+	updateColorFromAngle(v);
+};
+dialog.preflashAngle.onChange = function() {
+	var n = parseInt(this.text, 10);
+	if (isNaN(n)) n = 0;
+	if (n < 0) n = 0;
+	if (n > 360) n = 360;
+	dialog.preflashAngleSlider.value = n;
+	updateColorFromAngle(n);
+};
+
+	// Row containing the swatch and the RGB fields side-by-side, vertically centered
+	var swatchRow = preflashPanel.add("group");
+	swatchRow.orientation = "row";
+	swatchRow.spacing = 10;
+	swatchRow.alignment = ["fill", "top"];
+	// Swatch container (left)
+	var swatchContainer = swatchRow.add("group");
+	swatchContainer.orientation = "column";
+	try { swatchContainer.alignment = ["left", "center"]; } catch(e) {}
+	try { swatchContainer.margins = [0,0,0,0]; } catch(e) {}
+	try {
+		dialog.colorSwatch = swatchContainer.add("panel", undefined, "");
+		dialog.colorSwatch.preferredSize = [50, 50];
+		try { dialog.colorSwatch.minimumSize = [50,50]; } catch(e) {}
+		try { dialog.colorSwatch.alignment = ["left", "center"]; } catch(e) {}
+		try {
+			dialog.colorSwatch.graphics.backgroundColor = dialog.colorSwatch.graphics.newBrush(dialog.colorSwatch.graphics.BrushType.SOLID_COLOR, [(settings.preflashr !== undefined ? settings.preflashr : pre_flash_r)/255, (settings.preflashg !== undefined ? settings.preflashg : pre_flash_g)/255, (settings.preflashb !== undefined ? settings.preflashb : pre_flash_b)/255]);
+		} catch(e) {}
+	} catch(e) {}
+	// RGB fields container (right) — stacked vertically, centered
+	var rgbContainer = swatchRow.add("group");
+	rgbContainer.orientation = "column";
+	rgbContainer.spacing = 6;
+	try { rgbContainer.alignment = ["left", "center"]; } catch(e) {}
+	try { rgbContainer.margins = [0,0,0,0]; } catch(e) {}
+	
+	var rgbFieldsRow = rgbContainer.add("group");
+	rgbFieldsRow.orientation = "row";
+	rgbFieldsRow.spacing = 6;
+	rgbFieldsRow.alignment = ["left", "center"];
+	rgbFieldsRow.add("statictext", undefined, "R:");
+	dialog.preflashR = rgbFieldsRow.add("edittext", undefined, (settings.preflashr !== undefined ? settings.preflashr : pre_flash_r).toString());
+	dialog.preflashR.characters = 3;
+	try { dialog.preflashR.margins = [0,0,0,0]; } catch(e) {}
+	rgbFieldsRow.add("statictext", undefined, "G:");
+	dialog.preflashG = rgbFieldsRow.add("edittext", undefined, (settings.preflashg !== undefined ? settings.preflashg : pre_flash_g).toString());
+	dialog.preflashG.characters = 3;
+	try { dialog.preflashG.margins = [0,0,0,0]; } catch(e) {}
+	rgbFieldsRow.add("statictext", undefined, "B:");
+	dialog.preflashB = rgbFieldsRow.add("edittext", undefined, (settings.preflashb !== undefined ? settings.preflashb : pre_flash_b).toString());
+	dialog.preflashB.characters = 3;
+	try { dialog.preflashB.margins = [0,0,0,0]; } catch(e) {}
+
+	// Update swatch when user edits RGB fields manually
+	dialog.preflashR.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = pre_flash_r;
+		n = Math.max(0, Math.min(255, n));
+		this.text = String(n);
+		try { setSwatchRGB(n, parseInt(dialog.preflashG.text,10) || 0, parseInt(dialog.preflashB.text,10) || 0); } catch(e) {}
+		// Update sliders to match manual RGB
+		try { syncRGBtoSliders(n, parseInt(dialog.preflashG.text,10) || 0, parseInt(dialog.preflashB.text,10) || 0); } catch(e) {}
 	};
-	dialog.preflashColorAmount.onChange = function() {
-		var n = parseFloat(this.text);
-		if (isNaN(n)) n = preflash_color_amount_setting;
-		if (n < 0) n = 0;
-		if (n > 200) n = 200;
-		dialog.preflashColorAmountSlider.value = n;
-		this.text = String(Math.round(n));
+	dialog.preflashG.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = pre_flash_g;
+		n = Math.max(0, Math.min(255, n));
+		this.text = String(n);
+		try { setSwatchRGB(parseInt(dialog.preflashR.text,10) || 0, n, parseInt(dialog.preflashB.text,10) || 0); } catch(e) {}
+		try { syncRGBtoSliders(parseInt(dialog.preflashR.text,10) || 0, n, parseInt(dialog.preflashB.text,10) || 0); } catch(e) {}
 	};
+	dialog.preflashB.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = pre_flash_b;
+		n = Math.max(0, Math.min(255, n));
+		this.text = String(n);
+		try { setSwatchRGB(parseInt(dialog.preflashR.text,10) || 0, parseInt(dialog.preflashG.text,10) || 0, n); } catch(e) {}
+		try { syncRGBtoSliders(parseInt(dialog.preflashR.text,10) || 0, parseInt(dialog.preflashG.text,10) || 0, n); } catch(e) {}
+	};
+
+	// Color preview swatch (placeholder removed here — created inline in `rgbGroup`)
+
+	// After RGB fields exist, try to initialize the preset dropdown to match the current RGB.
+	(function initPresetSelection() {
+		var curR = coerceInteger(settings.preflashr !== undefined ? settings.preflashr : pre_flash_r, pre_flash_r, 0, 255);
+		var curG = coerceInteger(settings.preflashg !== undefined ? settings.preflashg : pre_flash_g, pre_flash_g, 0, 255);
+		var curB = coerceInteger(settings.preflashb !== undefined ? settings.preflashb : pre_flash_b, pre_flash_b, 0, 255);
+		for (var i = 0; i < _presets.length; i++) {
+			var p = _presets[i].rgb;
+			if (p[0] === curR && p[1] === curG && p[2] === curB) {
+				// presets start at dropdown index 1 (index 0 is the placeholder)
+				presetDropdown.selection = i + 1;
+				return;
+			}
+		}
+		// leave placeholder selected if no match
+	})();
+	// Ensure placeholder is shown by default (do not auto-select a preset on launch)
+	try { presetDropdown.selection = 0; } catch(e) {}
+
+	// Wire preset selection to populate the RGB edit fields when the user changes it.
+	presetDropdown.onChange = function() {
+		try {
+			var sel = presetDropdown.selection.index;
+			if (sel <= 0) return; // placeholder selected — do nothing
+			var rgb = _presets[sel - 1].rgb; // presets are offset by 1
+			dialog.preflashR.text = String(rgb[0]);
+			dialog.preflashG.text = String(rgb[1]);
+			dialog.preflashB.text = String(rgb[2]);
+			// Update swatch when a preset is chosen
+			try { setSwatchRGB(rgb[0], rgb[1], rgb[2]); } catch(e) {}
+			// Sync the preset RGB into the sliders (angle, chroma, brightness)
+			try {
+				var ang = syncRGBtoSliders(rgb[0], rgb[1], rgb[2]);
+				try { updateColorFromAngle(ang); } catch(e) {}
+			} catch(e) {}
+		} catch(e) {}
+	};
+
+	// Initialize swatch and sliders from the current RGB fields (keep defaults/settings)
+	try {
+		var r0 = parseInt(dialog.preflashR.text, 10);
+		var g0 = parseInt(dialog.preflashG.text, 10);
+		var b0 = parseInt(dialog.preflashB.text, 10);
+		if (isNaN(r0)) r0 = pre_flash_r;
+		if (isNaN(g0)) g0 = pre_flash_g;
+		if (isNaN(b0)) b0 = pre_flash_b;
+		try { setSwatchRGB(r0, g0, b0); } catch (e) {}
+		try { syncRGBtoSliders(r0, g0, b0); } catch (e) {}
+	} catch (e) {}
+
+	// (Preflash Brightness controls will be placed below Chroma)
+
 
 	// Whole Mask Range (0 - 255)
 	// Masking panel (contains Range and Gamma controls)
@@ -270,7 +523,7 @@ function displayDialog(settings, runmode) {
 	gammaGroup.orientation = "row";
 	gammaGroup.spacing = 6;
 	gammaGroup.alignment = ["fill", "top"];
-	gammaGroup.add("statictext", undefined, "Mask Density (Gamma)");
+	gammaGroup.add("statictext", undefined, "Mask Gamma");
 	var initialGamma = (settings.wholemaskgamma !== undefined ? parseFloat(settings.wholemaskgamma) : whole_mask_gamma);
 	if (isNaN(initialGamma)) initialGamma = whole_mask_gamma;
 	dialog.wholeMaskGammaText = gammaGroup.add("edittext", undefined, initialGamma.toFixed(2));
