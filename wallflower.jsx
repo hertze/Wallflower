@@ -25,11 +25,18 @@ var preflash_color_amount_setting = 30; // 0-200: preflash chroma amount (100 = 
 var whole_mask_reach = 255; // how far the whole mask extends (lower = more localized to shadows)
 var whole_mask_gamma = 0.9; // gamma to bias whole mask when building (lower = more midtone coverage)
 
+var highlight_mask_gamma = 0.9; // gamma to bias highlight mask when building (lower = more midtone coverage)
+var highlight_mask_range_start = 192; // extend highlight mask into lower mids but keep shadows/midtones cleaner
+var halation_blur_radius = 6; // blur radius for highlight mask (larger = smoother but more halo risk)
+var halation_strength = 50; // 1–100: percentage to restore the original highlights (applied via highlight mask)
+
+var grain_size = 8
+var grain_strength = 50; // 1–100: percentage opacity for the grain layer
+
 // Hard coded settings for the algorithm (not exposed in the UI)
 var lightness_channel_name = "Lightness"; // name of the lightness channel in Lab mode
 var microSmooth_strength = 50; // opacity percentage for the micro-smoothing layer (0..100)
 var preflash_shadow_threshold = 64; // luminance threshold considered 'shadow'
-var highlight_mask_gamma = 0.9; // gamma to bias highlight mask when building (lower = more midtone coverage)
 var paper_response_mask_gamma = 0.65; // stronger toe weighting for print-response smoothing
 var paper_response_mask_range_end = 192; // extend into lower mids but keep upper mids/highlights cleaner
 
@@ -82,6 +89,12 @@ var save = false;
 	/wholemaskreach [(WholeMaskReach) /integer]
 	/blackrestoreamt [(BlackRestoreAmt) /integer]
 	/whiterestoreamt [(WhiteRestoreAmt) /integer]
+	/highlightmaskrangestart [(HighlightMaskRangeStart) /integer]
+	/highlightmaskgamma [(HighlightMaskGamma) /string]
+	/halationstrength [(HalationStrength) /integer]
+	/halationblurradius [(HalationBlurRadius) /integer]
+	/grainsize [(GrainSize) /integer]
+	/grainstrength [(GrainStrength) /integer]
 		>>]
 			>>
 	>> ]]></terminology>
@@ -111,8 +124,8 @@ function displayDialog(settings, runmode) {
 	dialog.text = "Wallflower 2";
 	dialog.orientation = "column";
 	dialog.alignChildren = ["fill", "top"];
-	dialog.spacing = 14;
-	dialog.margins = 30;
+	dialog.spacing = 12;
+	dialog.margins = 20;
 
 	settings = settings || {};
 	runmode = runmode || "normal";
@@ -196,7 +209,6 @@ function displayDialog(settings, runmode) {
  	preflashPanel.alignChildren = ["fill", "top"];
 	preflashPanel.margins = 14;
 	preflashPanel.spacing = 10;
-
 
 
 	// Build preset dropdown list (with placeholder)
@@ -495,7 +507,7 @@ dialog.preflashAngle.onChange = function() {
 	rangeGroup.orientation = "row";
 	rangeGroup.spacing = 6;
 	rangeGroup.alignment = ["fill", "top"];
-	rangeGroup.add("statictext", undefined, "Mask Range");
+	rangeGroup.add("statictext", undefined, "Mask Range End");
 	var initialReach = (settings.wholemaskreach !== undefined ? coerceInteger(settings.wholemaskreach, whole_mask_reach, 0, 255) : whole_mask_reach);
 	if (isNaN(initialReach)) initialReach = whole_mask_reach;
 	dialog.wholeMaskReachText = rangeGroup.add("edittext", undefined, String(initialReach));
@@ -546,7 +558,114 @@ dialog.preflashAngle.onChange = function() {
 		this.text = (Math.round(n * 100) / 100).toFixed(2);
 	};
 
- 	var histogramBlurPanel = dialog.add("panel", undefined, "Overall Histogram and Softening");
+// Insert Halation controls after Preflash Masking
+var halationPanel = dialog.add("panel", undefined, "Paper Halation");
+halationPanel.orientation = "column";
+halationPanel.alignChildren = ["fill", "top"];
+halationPanel.margins = 12;
+halationPanel.spacing = 8;
+
+// Highlight Range (128-255)
+var highlightGroup = halationPanel.add("group");
+highlightGroup.orientation = "row";
+highlightGroup.spacing = 6;
+highlightGroup.alignment = ["fill", "top"];
+highlightGroup.add("statictext", undefined, "Highlight Range Start");
+dialog.highlightRangeText = highlightGroup.add("edittext", undefined, (settings.highlightmaskrangestart !== undefined ? settings.highlightmaskrangestart : highlight_mask_range_start).toString());
+dialog.highlightRangeText.characters = 4;
+try { dialog.highlightRangeText.margins = [0,0,0,0]; } catch(e) {}
+dialog.highlightRangeSlider = highlightGroup.add("slider", undefined, (settings.highlightmaskrangestart !== undefined ? settings.highlightmaskrangestart : highlight_mask_range_start), 128, 255);
+try { dialog.highlightRangeSlider.preferredSize = [220, 18]; } catch(e) {}
+
+dialog.highlightRangeSlider.onChanging = dialog.highlightRangeSlider.onChange = function() {
+	var v = Math.round(this.value);
+	dialog.highlightRangeText.text = String(v);
+};
+dialog.highlightRangeText.onChange = function() {
+	var n = parseInt(this.text, 10);
+	if (isNaN(n)) n = highlight_mask_range_start;
+	if (n < 128) n = 128;
+	if (n > 255) n = 255;
+	dialog.highlightRangeSlider.value = n;
+	this.text = String(n);
+};
+
+// Halation Gamma (0.5 - 1.5)
+var gammaGroup = halationPanel.add("group");
+gammaGroup.orientation = "row";
+gammaGroup.spacing = 6;
+gammaGroup.alignment = ["fill", "top"];
+gammaGroup.add("statictext", undefined, "Halation Gamma");
+dialog.halationGammaText = gammaGroup.add("edittext", undefined, (settings.highlightmaskgamma !== undefined ? settings.highlightmaskgamma : highlight_mask_gamma).toString());
+dialog.halationGammaText.characters = 5;
+try { dialog.halationGammaText.margins = [0,0,0,0]; } catch(e) {}
+dialog.halationGammaSlider = gammaGroup.add("slider", undefined, (settings.highlightmaskgamma !== undefined ? settings.highlightmaskgamma : highlight_mask_gamma), 0.5, 1.5);
+try { dialog.halationGammaSlider.preferredSize = [220, 18]; } catch(e) {}
+
+dialog.halationGammaSlider.onChanging = dialog.halationGammaSlider.onChange = function() {
+	var v = Math.round(this.value * 100) / 100;
+	dialog.halationGammaText.text = String(v);
+};
+dialog.halationGammaText.onChange = function() {
+	var n = parseFloat(this.text);
+	if (isNaN(n)) n = highlight_mask_gamma;
+	if (n < 0.5) n = 0.5;
+	if (n > 1.5) n = 1.5;
+	dialog.halationGammaSlider.value = n;
+	this.text = String(Math.round(n * 100) / 100);
+};
+
+// Halation Strength (0-100)
+var strengthGroupH = halationPanel.add("group");
+strengthGroupH.orientation = "row";
+strengthGroupH.spacing = 6;
+strengthGroupH.alignment = ["fill", "top"];
+strengthGroupH.add("statictext", undefined, "Halation Strength");
+dialog.halationStrengthText = strengthGroupH.add("edittext", undefined, (settings.halationstrength !== undefined ? settings.halationstrength : halation_strength).toString());
+dialog.halationStrengthText.characters = 4;
+try { dialog.halationStrengthText.margins = [0,0,0,0]; } catch(e) {}
+dialog.halationStrengthSlider = strengthGroupH.add("slider", undefined, (settings.halationstrength !== undefined ? settings.halationstrength : halation_strength), 0, 100);
+try { dialog.halationStrengthSlider.preferredSize = [220, 18]; } catch(e) {}
+
+dialog.halationStrengthSlider.onChanging = dialog.halationStrengthSlider.onChange = function() {
+	var v = Math.round(this.value);
+	dialog.halationStrengthText.text = String(v);
+};
+dialog.halationStrengthText.onChange = function() {
+	var n = parseInt(this.text, 10);
+	if (isNaN(n)) n = halation_strength;
+	if (n < 0) n = 0;
+	if (n > 100) n = 100;
+	dialog.halationStrengthSlider.value = n;
+	this.text = String(n);
+};
+
+// Bloom / Blur radius (0-15)
+var bloomGroup = halationPanel.add("group");
+bloomGroup.orientation = "row";
+bloomGroup.spacing = 6;
+bloomGroup.alignment = ["fill", "top"];
+bloomGroup.add("statictext", undefined, "Bloom");
+dialog.halationBloomText = bloomGroup.add("edittext", undefined, (settings.halationblurradius !== undefined ? settings.halationblurradius : halation_blur_radius).toString());
+dialog.halationBloomText.characters = 3;
+try { dialog.halationBloomText.margins = [0,0,0,0]; } catch(e) {}
+dialog.halationBloomSlider = bloomGroup.add("slider", undefined, (settings.halationblurradius !== undefined ? settings.halationblurradius : halation_blur_radius), 0, 15);
+try { dialog.halationBloomSlider.preferredSize = [220, 18]; } catch(e) {}
+
+dialog.halationBloomSlider.onChanging = dialog.halationBloomSlider.onChange = function() {
+	var v = Math.round(this.value);
+	dialog.halationBloomText.text = String(v);
+};
+dialog.halationBloomText.onChange = function() {
+	var n = parseInt(this.text, 10);
+	if (isNaN(n)) n = halation_blur_radius;
+	if (n < 0) n = 0;
+	if (n > 15) n = 15;
+	dialog.halationBloomSlider.value = n;
+	this.text = String(n);
+};
+
+ 	var histogramBlurPanel = dialog.add("panel", undefined, "Overall Histogram, Softening and Grain");
  	histogramBlurPanel.orientation = "column";
  	histogramBlurPanel.alignChildren = ["fill", "top"];
 	histogramBlurPanel.margins = 14;
@@ -628,7 +747,7 @@ dialog.preflashAngle.onChange = function() {
 	blurGroup.orientation = "row";
 	blurGroup.spacing = 6;
 	blurGroup.alignment = ["fill", "top"];
-	blurGroup.add("statictext", undefined, "Softening amount");
+	blurGroup.add("statictext", undefined, "Overall Softening");
 	dialog.blurRadius = blurGroup.add("edittext", undefined, (settings.blurradius !== undefined ? settings.blurradius : blur_radius).toString());
 	dialog.blurRadius.characters = 4;
 	try { dialog.blurRadius.margins = [0,0,0,0]; } catch(e) {}
@@ -649,6 +768,55 @@ dialog.preflashAngle.onChange = function() {
 		if (n < 0) n = 0;
 		if (n > 10) n = 10;
 		dialog.blurRadiusSlider.value = n;
+		this.text = String(n);
+	};
+
+	// Grain controls: placed after Softening Amount
+	var grainGroup = histogramBlurPanel.add("group");
+	grainGroup.orientation = "row";
+	grainGroup.spacing = 6;
+	grainGroup.alignment = ["fill", "top"];
+	grainGroup.add("statictext", undefined, "Paper Grain Size");
+	dialog.grainSizeText = grainGroup.add("edittext", undefined, (settings.grainsize !== undefined ? settings.grainsize : grain_size).toString());
+	dialog.grainSizeText.characters = 3;
+	try { dialog.grainSizeText.margins = [0,0,0,0]; } catch(e) {}
+	dialog.grainSizeSlider = grainGroup.add("slider", undefined, (settings.grainsize !== undefined ? settings.grainsize : grain_size), 0, 14);
+	try { dialog.grainSizeSlider.preferredSize = [220, 18]; } catch(e) {}
+
+	dialog.grainSizeSlider.onChanging = dialog.grainSizeSlider.onChange = function() {
+		var v = Math.round(this.value);
+		dialog.grainSizeText.text = String(v);
+	};
+	dialog.grainSizeText.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = grain_size;
+		if (n < 0) n = 0;
+		if (n > 14) n = 14;
+		dialog.grainSizeSlider.value = n;
+		this.text = String(n);
+	};
+
+	var grainStrengthGroup = histogramBlurPanel.add("group");
+	grainStrengthGroup.orientation = "row";
+	grainStrengthGroup.spacing = 6;
+	grainStrengthGroup.alignment = ["fill", "top"];
+	grainStrengthGroup.add("statictext", undefined, "Paper Grain Strength");
+	dialog.grainStrengthText = grainStrengthGroup.add("edittext", undefined, (settings.grainstrength !== undefined ? settings.grainstrength : grain_strength).toString());
+	dialog.grainStrengthText.characters = 4;
+	try { dialog.grainStrengthText.margins = [0,0,0,0]; } catch(e) {}
+	dialog.grainStrengthSlider = grainStrengthGroup.add("slider", undefined, (settings.grainstrength !== undefined ? settings.grainstrength : grain_strength), 0, 100);
+	try { dialog.grainStrengthSlider.preferredSize = [220, 18]; } catch(e) {}
+
+	dialog.grainStrengthSlider.onChanging = dialog.grainStrengthSlider.onChange = function() {
+		var v = Math.round(this.value);
+		dialog.grainStrengthText.text = String(v);
+	};
+	dialog.grainStrengthText.onChange = function() {
+		var n = parseInt(this.text, 10);
+		if (isNaN(n)) n = grain_strength;
+		if (n < 0) n = 0;
+		if (n > 100) n = 100;
+		dialog.grainStrengthSlider.value = n;
 		this.text = String(n);
 	};
 
@@ -690,7 +858,13 @@ dialog.preflashAngle.onChange = function() {
 		"preflashg": coerceInteger(dialog.preflashG.text, pre_flash_g, 0, 255),
 		"preflashb": coerceInteger(dialog.preflashB.text, pre_flash_b, 0, 255),
 		"preflashstrength": coerceInteger(dialog.preflashStrength.text, pre_flash_strength, 0, 100),
+		"highlightmaskrangestart": coerceInteger(dialog.highlightRangeText.text, highlight_mask_range_start, 128, 255),
+		"highlightmaskgamma": parseFloat(dialog.halationGammaText.text),
+		"halationstrength": coerceInteger(dialog.halationStrengthText.text, halation_strength, 0, 100),
+		"halationblurradius": coerceInteger(dialog.halationBloomText.text, halation_blur_radius, 0, 15),
 		"blurradius": coerceInteger(dialog.blurRadius.text, blur_radius, 0, 100),
+		"grainsize": coerceInteger(dialog.grainSizeText.text, grain_size, 0, 14),
+		"grainstrength": coerceInteger(dialog.grainStrengthText.text, grain_strength, 0, 100),
 		"savestatus": dialog.savestatus.value,
 		"savewhitepoint": dialog.savewhite.value,
 		"saveblackpoint": dialog.saveblack.value,
@@ -700,6 +874,7 @@ dialog.preflashAngle.onChange = function() {
 		"blackrestoreamt": coerceInteger(dialog.blackRestoreAmount.text, blackpoint_restore_strength, 1, 100),
 		"whiterestoreamt": coerceInteger(dialog.whiteRestoreAmount.text, whitepoint_restore_strength, 1, 100)
 	};
+
 }
 
 function getSettings() {
@@ -713,6 +888,13 @@ function getSettings() {
 			d.putInteger(stringIDToTypeID('preflashg'), result.preflashg);
 			d.putInteger(stringIDToTypeID('preflashb'), result.preflashb);
 			d.putInteger(stringIDToTypeID('preflashstrength'), result.preflashstrength);
+			// Halation settings
+			d.putInteger(stringIDToTypeID('highlightmaskrangestart'), result.highlightmaskrangestart);
+			d.putString(stringIDToTypeID('highlightmaskgamma'), String((result.highlightmaskgamma !== undefined ? result.highlightmaskgamma : highlight_mask_gamma)));
+			d.putInteger(stringIDToTypeID('halationstrength'), result.halationstrength);
+			d.putInteger(stringIDToTypeID('halationblurradius'), result.halationblurradius);
+				d.putInteger(stringIDToTypeID('grainsize'), result.grainsize);
+				d.putInteger(stringIDToTypeID('grainstrength'), result.grainstrength);
 			d.putInteger(stringIDToTypeID('blurradius'), result.blurradius);
 			d.putBoolean(stringIDToTypeID('savestatus'), coerceBoolean(result.savestatus, save));
 			d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
@@ -721,6 +903,7 @@ function getSettings() {
 			d.putInteger(stringIDToTypeID('wholemaskreach'), result.wholemaskreach);
 			// Store wholemaskgamma as a string to preserve float precision
 			d.putString(stringIDToTypeID('wholemaskgamma'), String((result.wholemaskgamma !== undefined ? result.wholemaskgamma : whole_mask_gamma)));
+
 			d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
 			d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
 			app.playbackParameters = d;        
@@ -778,7 +961,37 @@ function getSettings() {
 				}
 			}
 		}
+		// Halation values
+		var highlightmaskrangestart = undefined;
+		var highlightmaskgamma = undefined;
+		var halationstrength = undefined;
+		var halationblurradius = undefined;
+        var grainsize = undefined;
+        var grainstrength = undefined;
+		try { highlightmaskrangestart = app.playbackParameters.getInteger(stringIDToTypeID('highlightmaskrangestart')); } catch(e) { try { highlightmaskrangestart = app.playbackParameters.getString(stringIDToTypeID('highlightmaskrangestart')); } catch(ee) { highlightmaskrangestart = undefined; } }
+		try { highlightmaskgamma = app.playbackParameters.getString(stringIDToTypeID('highlightmaskgamma')); } catch(e) { try { highlightmaskgamma = app.playbackParameters.getString(stringIDToTypeID('highlightmaskgamma')); } catch(ee) { highlightmaskgamma = undefined; } }
+		try { halationstrength = app.playbackParameters.getInteger(stringIDToTypeID('halationstrength')); } catch(e) { try { halationstrength = app.playbackParameters.getString(stringIDToTypeID('halationstrength')); } catch(ee) { halationstrength = undefined; } }
+		try { halationblurradius = app.playbackParameters.getInteger(stringIDToTypeID('halationblurradius')); } catch(e) { try { halationblurradius = app.playbackParameters.getString(stringIDToTypeID('halationblurradius')); } catch(ee) { halationblurradius = undefined; } }
+		try { grainsize = app.playbackParameters.getInteger(stringIDToTypeID('grainsize')); } catch(e) { try { grainsize = app.playbackParameters.getString(stringIDToTypeID('grainsize')); } catch(ee) { grainsize = undefined; } }
+		try { grainstrength = app.playbackParameters.getInteger(stringIDToTypeID('grainstrength')); } catch(e) { try { grainstrength = app.playbackParameters.getString(stringIDToTypeID('grainstrength')); } catch(ee) { grainstrength = undefined; } }
+
 		preflashcoloramt = normalizePercent(preflashcoloramt, preflash_color_amount_setting, 0, 200);
+		// Normalize halation values with sensible defaults
+		if (highlightmaskrangestart === undefined || highlightmaskrangestart === null) highlightmaskrangestart = highlight_mask_range_start;
+		if (highlightmaskgamma !== undefined && highlightmaskgamma !== null) {
+			// may be stored as string representing float or integer*100
+			var _hg = parseFloat(highlightmaskgamma);
+			if (!isNaN(_hg)) {
+				if (_hg > 4.0) _hg = _hg / 100.0;
+				highlightmaskgamma = Math.max(0.25, Math.min(4.0, _hg));
+			} else {
+				highlightmaskgamma = highlight_mask_gamma;
+			}
+		} else {
+			highlightmaskgamma = highlight_mask_gamma;
+		}
+		if (halationstrength === undefined || halationstrength === null) halationstrength = halation_strength;
+		if (halationblurradius === undefined || halationblurradius === null) halationblurradius = halation_blur_radius;
 		// Read wholemaskreach (stored as integer)
 		var wholemaskreach = undefined;
 		try { wholemaskreach = app.playbackParameters.getInteger(stringIDToTypeID('wholemaskreach')); } catch(e) {
@@ -821,6 +1034,12 @@ function getSettings() {
 					preflashcoloramt: preflashcoloramt,
 					wholemaskreach: (wholemaskreach !== undefined ? wholemaskreach : whole_mask_reach),
 					wholemaskgamma: (wholemaskgammaFloat !== undefined ? wholemaskgammaFloat : whole_mask_gamma),
+					highlightmaskrangestart: (highlightmaskrangestart !== undefined ? highlightmaskrangestart : highlight_mask_range_start),
+					highlightmaskgamma: (highlightmaskgamma !== undefined ? highlightmaskgamma : highlight_mask_gamma),
+					halationstrength: (halationstrength !== undefined ? halationstrength : halation_strength),
+					halationblurradius: (halationblurradius !== undefined ? halationblurradius : halation_blur_radius),
+					grainsize: (grainsize !== undefined ? grainsize : grain_size),
+					grainstrength: (grainstrength !== undefined ? grainstrength : grain_strength),
 					blackrestoreamt: blackrestoreamt,
 					whiterestoreamt: whiterestoreamt
 				}, "edit");
@@ -838,6 +1057,13 @@ function getSettings() {
 				d.putInteger(stringIDToTypeID('wholemaskreach'), result.wholemaskreach);
 				// Store wholemaskgamma as a string to preserve float precision
 				d.putString(stringIDToTypeID('wholemaskgamma'), String((result.wholemaskgamma !== undefined ? result.wholemaskgamma : whole_mask_gamma)));
+				// Halation (store when editing action step)
+				d.putInteger(stringIDToTypeID('highlightmaskrangestart'), result.highlightmaskrangestart);
+				d.putString(stringIDToTypeID('highlightmaskgamma'), String((result.highlightmaskgamma !== undefined ? result.highlightmaskgamma : highlight_mask_gamma)));
+				d.putInteger(stringIDToTypeID('halationstrength'), result.halationstrength);
+				d.putInteger(stringIDToTypeID('halationblurradius'), result.halationblurradius);
+				d.putInteger(stringIDToTypeID('grainsize'), result.grainsize);
+				d.putInteger(stringIDToTypeID('grainstrength'), result.grainstrength);
 				d.putInteger(stringIDToTypeID('blackrestoreamt'), result.blackrestoreamt);
 				d.putInteger(stringIDToTypeID('whiterestoreamt'), result.whiterestoreamt);
 				app.playbackParameters = d;
@@ -852,13 +1078,19 @@ function getSettings() {
 				"preflashg": preflashg,
 				"preflashb": preflashb,
 				"preflashstrength": preflashstrength,
+				"highlightmaskrangestart": (highlightmaskrangestart !== undefined ? highlightmaskrangestart : highlight_mask_range_start),
+				"highlightmaskgamma": (highlightmaskgamma !== undefined ? highlightmaskgamma : highlight_mask_gamma),
+				"halationstrength": (halationstrength !== undefined ? halationstrength : halation_strength),
+				"halationblurradius": (halationblurradius !== undefined ? halationblurradius : halation_blur_radius),
+				"grainsize": (grainsize !== undefined ? grainsize : grain_size),
+				"grainstrength": (grainstrength !== undefined ? grainstrength : grain_strength),
 				"blurradius": blurradius,
 				"savestatus": savestatus,
 				"savewhitepoint": savewhite,
 				"saveblackpoint": saveblack,
 				"preflashcoloramt": preflashcoloramt,
-					"wholemaskreach": (wholemaskreach !== undefined ? wholemaskreach : undefined),
-					"blackrestoreamt": blackrestoreamt,
+				"wholemaskreach": (wholemaskreach !== undefined ? wholemaskreach : undefined),
+				"blackrestoreamt": blackrestoreamt,
 				"whiterestoreamt": whiterestoreamt,
 				"wholemaskgamma": (wholemaskgammaFloat !== undefined ? wholemaskgammaFloat : undefined)
 			};
@@ -916,6 +1148,31 @@ function processSettings(runtimesettings) {
 						// Apply whole mask reach if provided (integer 0-255)
 						if (runtimesettings.wholemaskreach !== undefined && runtimesettings.wholemaskreach !== null) {
 							whole_mask_reach = coerceInteger(runtimesettings.wholemaskreach, whole_mask_reach, 0, 255);
+						}
+
+						// Apply highlight mask / halation settings if provided
+						if (runtimesettings.highlightmaskrangestart !== undefined && runtimesettings.highlightmaskrangestart !== null) {
+							highlight_mask_range_start = coerceInteger(runtimesettings.highlightmaskrangestart, highlight_mask_range_start, 128, 255);
+						}
+						if (runtimesettings.highlightmaskgamma !== undefined && runtimesettings.highlightmaskgamma !== null) {
+							var _hg = parseFloat(runtimesettings.highlightmaskgamma);
+							if (!isNaN(_hg)) {
+								if (_hg > 4.0) _hg = _hg / 100.0;
+								highlight_mask_gamma = Math.max(0.25, Math.min(4.0, _hg));
+							}
+						}
+						if (runtimesettings.halationstrength !== undefined && runtimesettings.halationstrength !== null) {
+							halation_strength = coerceInteger(runtimesettings.halationstrength, halation_strength, 0, 100);
+						}
+						if (runtimesettings.halationblurradius !== undefined && runtimesettings.halationblurradius !== null) {
+							halation_blur_radius = coerceInteger(runtimesettings.halationblurradius, halation_blur_radius, 0, 100);
+						}
+						// Apply grain settings if provided
+						if (runtimesettings.grainsize !== undefined && runtimesettings.grainsize !== null) {
+							grain_size = coerceInteger(runtimesettings.grainsize, grain_size, 0, 14);
+						}
+						if (runtimesettings.grainstrength !== undefined && runtimesettings.grainstrength !== null) {
+							grain_strength = coerceInteger(runtimesettings.grainstrength, grain_strength, 0, 100);
 						}
 }
 
@@ -1412,7 +1669,7 @@ try {
 		// Pass an explicit gamma (third argument) for each mask to bias midtones when needed
 		createLuminanceMasks(0, whole_mask_reach, whole_mask_gamma, "Whole Mask", doc_scale * blur_radius);
 		createLuminanceMasks(0, paper_response_mask_range_end, paper_response_mask_gamma, "Paper Response Mask", doc_scale * blur_radius);
-		createLuminanceMasks(192, 255, highlight_mask_gamma, "Highlight Mask", 0);
+		createLuminanceMasks(highlight_mask_range_start, 255, highlight_mask_gamma, "Highlight Mask", 0);
 		var wholeMaskCoverage = computeMaskCoverage("Whole Mask");
 		var paperResponseCoverage = computeMaskCoverage("Paper Response Mask");
 
@@ -1442,7 +1699,7 @@ try {
 		var halationLayer = imagelayer.duplicate();
 		halationLayer.name = "Halation";
 		halationLayer.blendMode = BlendMode.LINEARDODGE;
-		halationLayer.opacity = 50;
+		halationLayer.opacity = halation_strength;
 
 		doc.activeLayer = halationLayer;
 
@@ -1450,7 +1707,7 @@ try {
 		doc.selection.invert();
 		doc.selection.clear();
 
-		halationLayer.applyGaussianBlur(doc_scale * blur_radius * 2);
+		halationLayer.applyGaussianBlur(doc_scale * halation_blur_radius);
 		doc.selection.load(doc.channels.getByName("Highlight Mask"), SelectionType.REPLACE);
 		doc.selection.clear();
 		doc.selection.deselect();
@@ -1460,13 +1717,13 @@ try {
 		var grainLayer = imagelayer.duplicate();
 		grainLayer.name = "Grain";
 		grainLayer.blendMode = BlendMode.SOFTLIGHT;
-		grainLayer.opacity = 50;
+		grainLayer.opacity = grain_strength;
 
 		doc.activeLayer = grainLayer;
 		doc.selection.selectAll();
 		doc.selection.fill(greyColor)
-		grainLayer.applyAddNoise(doc_scale*8, NoiseDistribution.GAUSSIAN, true);
-		grainLayer.applyGaussianBlur(doc_scale * 0.3);
+		grainLayer.applyAddNoise(doc_scale * grain_size, NoiseDistribution.GAUSSIAN, true);
+		grainLayer.applyGaussianBlur(doc_scale * grain_size * 0.0375);
 		doc.selection.load(doc.channels.getByName("Paper Response Mask"));
 		doc.selection.invert();
 		doc.selection.clear();
