@@ -1,3 +1,4 @@
+
 // W A L L F L O W E R
 //
 // Version 2 beta
@@ -8,7 +9,6 @@
 
 #target photoshop
 
-
 // Default settings ------------------------------------------------------------
 
 var pre_flash_r = 235;
@@ -17,9 +17,7 @@ var pre_flash_b = 225;
 var pre_flash_strength = 30;
 var blur_radius = 3;
 var auto_adjust_preflash = true;
-var preserve_whitepoint = true;
 var whitepoint_restore_strength = 20; // 1–100: percentage to restore the original white point
-var preserve_blackpoint = true;
 var blackpoint_restore_strength = 50; // 1–100: percentage to restore the original black point
 var preflash_color_amount_setting = 30; // 0-200: preflash chroma amount (100 = current baseline)
 var whole_mask_reach = 255; // how far the whole mask extends (lower = more localized to shadows)
@@ -82,8 +80,7 @@ var save = false;
 	/preflashstrength [(PreflashStrength) /integer]
 	/blurradius [(BlurRadius) /integer]
 	/savestatus [(Save) /boolean]
-	/savewhitepoint [(SaveWhitePoint) /boolean]
-	/saveblackpoint [(SaveBlackPoint) /boolean]
+    
 	/preflashcoloramt [(PreflashColorAmt) /integer]
 	/wholemaskgamma [(WholeMaskGamma) /string]
 	/wholemaskreach [(WholeMaskReach) /integer]
@@ -124,8 +121,8 @@ function displayDialog(settings, runmode) {
 	dialog.text = "Wallflower 2";
 	dialog.orientation = "column";
 	dialog.alignChildren = ["fill", "top"];
-	dialog.spacing = 12;
-	dialog.margins = 20;
+	dialog.spacing = 14;
+	dialog.margins = 30;
 
 	settings = settings || {};
 	runmode = runmode || "normal";
@@ -384,8 +381,8 @@ dialog.preflashAngle.onChange = function() {
 	try { swatchContainer.margins = [0,0,0,0]; } catch(e) {}
 	try {
 		dialog.colorSwatch = swatchContainer.add("panel", undefined, "");
-		dialog.colorSwatch.preferredSize = [50, 50];
-		try { dialog.colorSwatch.minimumSize = [50,50]; } catch(e) {}
+		dialog.colorSwatch.preferredSize = [60, 60];
+		try { dialog.colorSwatch.minimumSize = [60,60]; } catch(e) {}
 		try { dialog.colorSwatch.alignment = ["left", "center"]; } catch(e) {}
 		try {
 			dialog.colorSwatch.graphics.backgroundColor = dialog.colorSwatch.graphics.newBrush(dialog.colorSwatch.graphics.BrushType.SOLID_COLOR, [(settings.preflashr !== undefined ? settings.preflashr : pre_flash_r)/255, (settings.preflashg !== undefined ? settings.preflashg : pre_flash_g)/255, (settings.preflashb !== undefined ? settings.preflashb : pre_flash_b)/255]);
@@ -677,7 +674,8 @@ dialog.halationBloomText.onChange = function() {
 	savewhiteGroup.orientation = "row";
 	savewhiteGroup.spacing = 6;
 	savewhiteGroup.alignment = ["fill", "top"];
-	dialog.savewhite = savewhiteGroup.add("checkbox", undefined, "Preserve White Point");
+	// White restore label + amount
+	savewhiteGroup.add("statictext", undefined, "Preserve White Point");
 	dialog.whiteRestoreAmount = savewhiteGroup.add("edittext", undefined, undefined, { name: "whiteRestoreAmount" });
 	dialog.whiteRestoreAmount.characters = 4;
 	try { dialog.whiteRestoreAmount.margins = [0,0,0,0]; } catch(e) {}
@@ -701,7 +699,6 @@ dialog.halationBloomText.onChange = function() {
 	};
 	var whitePctLabel = savewhiteGroup.add("statictext", undefined, "%");
 	try { whitePctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
-	dialog.savewhite.value = coerceBoolean(settings.savewhitepoint, preserve_whitepoint);
 	if (settings.whiterestoreamt !== undefined) {
 		dialog.whiteRestoreAmount.text = settings.whiterestoreamt.toString();
 	} else {
@@ -713,7 +710,8 @@ dialog.halationBloomText.onChange = function() {
 	saveblackGroup.orientation = "row";
 	saveblackGroup.spacing = 6;
 	saveblackGroup.alignment = ["fill", "top"];
-	dialog.saveblack = saveblackGroup.add("checkbox", undefined, "Preserve Black Point");
+	// Black restore label + amount
+	saveblackGroup.add("statictext", undefined, "Preserve Black Point");
 	dialog.blackRestoreAmount = saveblackGroup.add("edittext", undefined, undefined, { name: "blackRestoreAmount" });
 	dialog.blackRestoreAmount.characters = 4;
 	try { dialog.blackRestoreAmount.margins = [0,0,0,0]; } catch(e) {}
@@ -737,7 +735,6 @@ dialog.halationBloomText.onChange = function() {
 		this.text = n.toString();
 	};
 	try { blackPctLabel.margins = [0, 0, 0, 0]; } catch(e) {}
-	dialog.saveblack.value = coerceBoolean(settings.saveblackpoint, preserve_blackpoint);
 	if (settings.blackrestoreamt !== undefined) {
 		dialog.blackRestoreAmount.text = settings.blackrestoreamt.toString();
 	} else {
@@ -868,8 +865,6 @@ dialog.halationBloomText.onChange = function() {
 		"grainsize": coerceInteger(dialog.grainSizeText.text, grain_size, 0, 14),
 		"grainstrength": coerceInteger(dialog.grainStrengthText.text, grain_strength, 0, 100),
 		"savestatus": dialog.savestatus.value,
-		"savewhitepoint": dialog.savewhite.value,
-		"saveblackpoint": dialog.saveblack.value,
 		"preflashcoloramt": coerceInteger(dialog.preflashColorAmount.text, preflash_color_amount_setting, 0, 200),
 		"wholemaskreach": coerceInteger(dialog.wholeMaskReachText.text, whole_mask_reach, 0, 255),
 		"wholemaskgamma": parseFloat(dialog.wholeMaskGammaText.text),
@@ -885,11 +880,11 @@ function getSettings() {
 		// normal run (from scripts menu)
 		var result = displayDialog(undefined, "normal");
 		if (!result) { isCancelled = true; executeScript = false; return null; } else {
-			var d = new ActionDescriptor;
-			d.putInteger(stringIDToTypeID('preflashr'), result.preflashr);
-			d.putInteger(stringIDToTypeID('preflashg'), result.preflashg);
-			d.putInteger(stringIDToTypeID('preflashb'), result.preflashb);
-			d.putInteger(stringIDToTypeID('preflashstrength'), result.preflashstrength);
+			// Create a descriptor to store playbackParameters for action recording
+			var d = new ActionDescriptor();
+			// savewhitepoint/saveblackpoint removed
+			// d.putInteger(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
+			// d.putInteger(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
 			// Halation settings
 			d.putInteger(stringIDToTypeID('highlightmaskrangestart'), result.highlightmaskrangestart);
 			d.putString(stringIDToTypeID('highlightmaskgamma'), String((result.highlightmaskgamma !== undefined ? result.highlightmaskgamma : highlight_mask_gamma)));
@@ -899,8 +894,7 @@ function getSettings() {
 				d.putInteger(stringIDToTypeID('grainstrength'), result.grainstrength);
 			d.putInteger(stringIDToTypeID('blurradius'), result.blurradius);
 			d.putBoolean(stringIDToTypeID('savestatus'), coerceBoolean(result.savestatus, save));
-			d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
-			d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
+			// savewhitepoint/saveblackpoint removed — use restore amount fields instead
 			d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
 			d.putInteger(stringIDToTypeID('wholemaskreach'), result.wholemaskreach);
 			// Store wholemaskgamma as a string to preserve float precision
@@ -919,8 +913,6 @@ function getSettings() {
 		var preflashstrength = pre_flash_strength;
 		var blurradius = blur_radius;
 		var savestatus = null;
-		var saveblack = null;
-		var savewhite = null;
 		var preflashcoloramt = null;
 		var blackrestoreamt = null;
 		var whiterestoreamt = null;
@@ -949,12 +941,7 @@ function getSettings() {
 		try { savestatus = app.playbackParameters.getBoolean(stringIDToTypeID('savestatus')); } catch(e) {
 			try { savestatus = app.playbackParameters.getString(stringIDToTypeID('savestatus')); } catch(ee) { savestatus = undefined; }
 		}
-		try { saveblack = app.playbackParameters.getBoolean(stringIDToTypeID('saveblackpoint')); } catch(e) {
-			try { saveblack = app.playbackParameters.getString(stringIDToTypeID('saveblackpoint')); } catch(ee) { saveblack = undefined; }
-		}
-		try { savewhite = app.playbackParameters.getBoolean(stringIDToTypeID('savewhitepoint')); } catch(e) {
-			try { savewhite = app.playbackParameters.getString(stringIDToTypeID('savewhitepoint')); } catch(ee) { savewhite = undefined; }
-		}
+		// savewhitepoint/saveblackpoint removed — no boolean flags to read
 		try { preflashcoloramt = app.playbackParameters.getInteger(stringIDToTypeID('preflashcoloramt')); } catch(e) {
 			try { preflashcoloramt = app.playbackParameters.getString(stringIDToTypeID('preflashcoloramt')); } catch(ee) {
 				// Backward compatibility: old action steps may still carry desatamount.
@@ -1031,8 +1018,6 @@ function getSettings() {
 					preflashstrength: preflashstrength,
 					blurradius: blurradius,
 					savestatus: savestatus,
-					saveblackpoint: saveblack,
-					savewhitepoint: savewhite,
 					preflashcoloramt: preflashcoloramt,
 					wholemaskreach: (wholemaskreach !== undefined ? wholemaskreach : whole_mask_reach),
 					wholemaskgamma: (wholemaskgammaFloat !== undefined ? wholemaskgammaFloat : whole_mask_gamma),
@@ -1053,8 +1038,6 @@ function getSettings() {
 				d.putInteger(stringIDToTypeID('preflashstrength'), result.preflashstrength);
 				d.putInteger(stringIDToTypeID('blurradius'), result.blurradius);
 				d.putBoolean(stringIDToTypeID('savestatus'), coerceBoolean(result.savestatus, save));
-				d.putBoolean(stringIDToTypeID('savewhitepoint'), coerceBoolean(result.savewhitepoint, preserve_whitepoint));
-				d.putBoolean(stringIDToTypeID('saveblackpoint'), coerceBoolean(result.saveblackpoint, preserve_blackpoint));
 				d.putInteger(stringIDToTypeID('preflashcoloramt'), result.preflashcoloramt);
 				d.putInteger(stringIDToTypeID('wholemaskreach'), result.wholemaskreach);
 				// Store wholemaskgamma as a string to preserve float precision
@@ -1088,8 +1071,6 @@ function getSettings() {
 				"grainstrength": (grainstrength !== undefined ? grainstrength : grain_strength),
 				"blurradius": blurradius,
 				"savestatus": savestatus,
-				"savewhitepoint": savewhite,
-				"saveblackpoint": saveblack,
 				"preflashcoloramt": preflashcoloramt,
 				"wholemaskreach": (wholemaskreach !== undefined ? wholemaskreach : undefined),
 				"blackrestoreamt": blackrestoreamt,
@@ -1104,14 +1085,7 @@ function processSettings(runtimesettings) {
 	// Process dialog/action settings and update runtime globals
 	var saveStatus = runtimesettings.savestatus;
 	save = coerceBoolean(saveStatus, false);
-		// Apply preserve_whitepoint setting from dialog/playbackParameters if present
-		if (runtimesettings.savewhitepoint !== undefined && runtimesettings.savewhitepoint !== null) {
-			preserve_whitepoint = coerceBoolean(runtimesettings.savewhitepoint, preserve_whitepoint);
-		}
-		// Apply preserve_blackpoint setting from dialog/playbackParameters if present
-		if (runtimesettings.saveblackpoint !== undefined && runtimesettings.saveblackpoint !== null) {
-			preserve_blackpoint = coerceBoolean(runtimesettings.saveblackpoint, preserve_blackpoint);
-		}
+		// savewhitepoint/saveblackpoint flags removed; use restore amount fields instead
 
 		if (runtimesettings.preflashr !== undefined && runtimesettings.preflashr !== null) {
 			pre_flash_r = coerceInteger(runtimesettings.preflashr, pre_flash_r, 0, 255);
@@ -1366,8 +1340,6 @@ function softenImage(layer, radius) {
 }
 
 function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
-	preserve_blackpoint = (preserve_blackpoint === true || preserve_blackpoint === "true");
-	preserve_whitepoint = (preserve_whitepoint === true || preserve_whitepoint === "true");
 
 	if (auto_adjust_preflash) {
 		pre_flash_strength = autoAdjustPreflashStrength(pre_flash_strength);
@@ -1413,8 +1385,8 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 
 		// Exposure lift centered around mids with compensation to keep average brightness stable.
 		var exposureLift = 24 * strengthNorm * (0.9 + 0.2 * wholeMaskCoverage) * (1 + 0.5 * strengthNorm);
-		var midPull = exposureLift * (preserve_whitepoint ? 0.62 : 0.78);
-		var highPull = exposureLift * (preserve_whitepoint ? 0.78 : 1.02);
+		var midPull = exposureLift * ((whitepoint_restore_strength > 0) ? 0.62 : 0.78);
+		var highPull = exposureLift * ((whitepoint_restore_strength > 0) ? 0.78 : 1.02);
 		// Make dark-region lift scale more strongly with preflash strength.
 		var shadowLift = exposureLift * (0.55 + 0.45 * strengthNorm);
 
@@ -1422,7 +1394,7 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 		var p64 = 64 + shadowLift * 1.12 - midPull * 0.22;
 		var p128 = 128 + exposureLift - midPull;
 		var shoulderStrength = 0.65 + 0.45 * strengthNorm;
-		if (preserve_whitepoint) shoulderStrength = shoulderStrength * 0.82;
+		if (whitepoint_restore_strength > 0) shoulderStrength = shoulderStrength * 0.82;
 		var p160 = 160 + exposureLift * 0.68 - (midPull * 0.64 + highPull * (0.22 * shoulderStrength));
 		var p192 = 192 + exposureLift * 0.36 - highPull * (1.08 * shoulderStrength);
 		var p224 = 224 + exposureLift * 0.10 - highPull * (1.18 * shoulderStrength);
@@ -1490,8 +1462,8 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 	function applyEndpointLevels(midIn) {
 		// Preserve strengths scale how much endpoint/gamma shaping is applied.
 		// Example: preserve at 70% => apply 30% of the corresponding side's change.
-		var blackChangeScale = preserve_blackpoint ? clamp01(1 - (blackpoint_restore_strength / 100)) : 1;
-		var whiteChangeScale = preserve_whitepoint ? clamp01(1 - (whitepoint_restore_strength / 100)) : 1;
+		var blackChangeScale = (blackpoint_restore_strength > 0) ? clamp01(1 - (blackpoint_restore_strength / 100)) : 1;
+		var whiteChangeScale = (whitepoint_restore_strength > 0) ? clamp01(1 - (whitepoint_restore_strength / 100)) : 1;
 
 		var inBlack = clamp255(Math.round(22 * strengthNorm * blackChangeScale));
 		var inWhite = clamp255(255 - Math.round(16 * strengthNorm * whiteChangeScale));
@@ -1510,9 +1482,7 @@ function applyPreflash(wholeMaskCoverage, paperResponseCoverage) {
 			var levelsGammaTarget = solveLevelsGamma(midIn, inBlack, inWhite, outBlack, outWhite);
 			var gammaChangeScale = (blackChangeScale + whiteChangeScale) / 2;
 			var levelsGamma = 1 + (levelsGammaTarget - 1) * gammaChangeScale;
-			if (!preserve_blackpoint && !preserve_whitepoint) {
-				levelsGamma = levelsGamma * 0.90;
-			}
+			// When preserves are disabled, apply full levels gamma (no extra dampening)
 			levelsGamma = Math.max(0.25, Math.min(4.0, levelsGamma));
 			imagelayer.adjustLevels(inBlack, inWhite, levelsGamma, outBlack, outWhite);
 		} catch (e) {}
