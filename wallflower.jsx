@@ -67,13 +67,13 @@ var save = false;
 /*
 // BEGIN__HARVEST_EXCEPTION_ZSTRING
 <javascriptresource>
-<name>Wallflower 2</name>
+<name>Wallflower</name>
 <menu>automate</menu>
 <enableinfo>true</enableinfo>
 <eventid>1f4b8c3a-6d7e-4f2b-9c8a-2e3d4f5a6b7c</eventid>
 <terminology><![CDATA[<< /Version 1
 	/Events <<
-	/1f4b8c3a-6d7e-4f2b-9c8a-2e3d4f5a6b7c [(Wallflower 2) <<
+	/1f4b8c3a-6d7e-4f2b-9c8a-2e3d4f5a6b7c [(Wallflower) <<
 	/preflashr [(PreflashR) /integer]
 	/preflashg [(PreflashG) /integer]
 	/preflashb [(PreflashB) /integer]
@@ -118,7 +118,7 @@ function coerceInteger(value, fallback, minVal, maxVal) {
 function displayDialog(settings, runmode) {
 	// Display dialog box.
 	var dialog = new Window("dialog");
-	dialog.text = "Wallflower 2";
+	dialog.text = "Wallflower";
 	dialog.orientation = "column";
 	dialog.alignChildren = ["fill", "top"];
 	dialog.spacing = 14;
